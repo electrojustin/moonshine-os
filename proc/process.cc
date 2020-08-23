@@ -96,11 +96,12 @@ void execute_new_process(void) {
 	// Set up the temporary thread local storage (TLS)
 	set_tls(process_list->tls_segments[process_list->tls_segment_index]);
 
+	main_tss.esp0 = process_list->kernel_stack_top;
+	flush_tss();
+	lib::std::printk("%x\n", process_list->kernel_stack_top);
+
 	// Setup the MMU to use our process's page tables
 	set_page_directory(process_list->page_dir);
-
-	main_tss.esp0 = esp;
-	flush_tss();
 
 	// Setup the process stack and start executing
 	asm volatile(
@@ -204,7 +205,7 @@ char spawn_new_process(char* path, struct process_memory_segment* segments, uint
 	new_proc->working_dir = make_string_copy(working_dir);
 
 	// Copy the segment map into the process struct
-	new_proc->num_segments = num_segments+1;
+	new_proc->num_segments = num_segments+2;
 	new_proc->segments = (struct process_memory_segment*)kmalloc(new_proc->num_segments*sizeof(struct process_memory_segment));
 	memcpy((char*)segments, (char*)new_proc->segments, num_segments*sizeof(struct process_memory_segment));
 
@@ -216,12 +217,21 @@ char spawn_new_process(char* path, struct process_memory_segment* segments, uint
 		}
 	}
 	stack_bottom -= DEFAULT_STACK_SIZE;
-	struct process_memory_segment* stack_segment = new_proc->segments+(new_proc->num_segments-1);
+	struct process_memory_segment* stack_segment = new_proc->segments+(new_proc->num_segments-2);
 	stack_segment->virtual_address = (void*)stack_bottom;
 	stack_segment->segment_size = DEFAULT_STACK_SIZE;
 	stack_segment->disk_size = 0;
 	stack_segment->source = nullptr;
+	stack_segment->flags = READABLE_MEMORY || WRITEABLE_MEMORY;
 	new_proc->esp = ((uint32_t)stack_segment->virtual_address + stack_segment->segment_size) & 0xFFFFFFFC; // Stacks are generally 4 byte aligned
+
+	// Add a kernel stack segment
+	struct process_memory_segment* kernel_stack_segment = new_proc->segments+(new_proc->num_segments-1);
+	kernel_stack_segment->virtual_address = nullptr; // Let's make sure the kernel stack has the same virtual address as it does physical
+	kernel_stack_segment->segment_size = DEFAULT_STACK_SIZE;
+	kernel_stack_segment->disk_size = 0;
+	kernel_stack_segment->source = nullptr;
+	kernel_stack_segment->flags = READABLE_MEMORY | WRITEABLE_MEMORY;
 
 	// Allocate memory segments and copy disk data into them
 	for (int i = 0; i < new_proc->num_segments; i++) {
@@ -231,14 +241,20 @@ char spawn_new_process(char* path, struct process_memory_segment* segments, uint
 		new_proc->segments[i].alloc_size = alloc_size;
 		new_proc->segments[i].actual_address = kmalloc_aligned(alloc_size, PAGE_SIZE);
 		memset((char*)new_proc->segments[i].actual_address, alloc_size, 0);
-		if (new_proc->segments[i].source != nullptr) {
-			memcpy((char*)new_proc->segments[i].source, (char*)new_proc->segments[i].actual_address + page_offset, new_proc->segments[i].disk_size);
-		}
-		if (new_proc->segments[i].flags == (READABLE_MEMORY | WRITEABLE_MEMORY)) {
+
+		if (new_proc->segments[i].virtual_address == nullptr) {
+			new_proc->segments[i].virtual_address = new_proc->segments[i].actual_address;
+		} else if (new_proc->segments[i].flags == (READABLE_MEMORY | WRITEABLE_MEMORY)) {
 			new_proc->brk = ((uint32_t)new_proc->segments[i].virtual_address & (~(PAGE_SIZE-1))) + alloc_size;
 			new_proc->actual_brk = new_proc->brk;
 		}
+
+		if (new_proc->segments[i].source != nullptr) {
+			memcpy((char*)new_proc->segments[i].source, (char*)new_proc->segments[i].actual_address + page_offset, new_proc->segments[i].disk_size);
+		}
 	}
+
+	new_proc->kernel_stack_top = ((uint32_t)kernel_stack_segment->virtual_address + kernel_stack_segment->segment_size) & 0xFFFFFFFC;
 
 	// Add a temporary TLS
 	// There's a bug in GNU libc that lets it make software syscalls before it sets up the TLS under specific circumstances
@@ -248,7 +264,9 @@ char spawn_new_process(char* path, struct process_memory_segment* segments, uint
 	temp_tls->gdt_index = TLS_ENTRY_OFFSET;
 	temp_tls->segment_base = (uint32_t)stack_segment->virtual_address;
 	temp_tls->limit = 0xFF;
-	*(uint32_t*)((uint32_t)stack_segment->actual_address + 0x10) = (uint32_t)raw_syscall; // Got this magic number from a disassembly dump of libc
+	uint32_t raw_syscall_copy_offset = 0x100;
+	memcpy((char*)raw_syscall, (char*)(stack_segment->actual_address + raw_syscall_copy_offset), 3); // Kernel memory isn't readable from userspace, so we just copy it to a random address near the bottom of the stack
+	*(uint32_t*)((uint32_t)stack_segment->actual_address + 0x10) = (uint32_t)(stack_segment->virtual_address + raw_syscall_copy_offset); // Got this magic number from a disassembly dump of libc
 	new_proc->tls_segments = temp_tls;
 	new_proc->num_tls_segments = 1;
 	new_proc->tls_segment_index = 0;
@@ -317,9 +335,10 @@ void execute_processes(void) {
 			cleanup_process(process_list->prev);
 		} else if (process_list->process_state == RUNNABLE) {
 			uint32_t esp = process_list->esp;
+			uint32_t kernel_esp = process_list->kernel_stack_top;
 			set_tls(process_list->tls_segments[process_list->tls_segment_index]);
 			set_page_directory(process_list->page_dir);
-			restore_processor_state(esp);
+			restore_processor_state(esp, kernel_esp);
 			process_list->process_state = STOPPED; // This will only happen if the process exited
 			process_list = process_list->next;
 		} else if (process_list->process_state == NEW) {

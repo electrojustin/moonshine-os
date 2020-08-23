@@ -1,10 +1,13 @@
 #include "arch/i386/memory/gdt.h"
+#include "lib/std/memory.h"
 #include "lib/std/stdio.h"
 
 namespace arch {
 namespace memory {
 
 namespace {
+
+using lib::std::memset;
 
 struct gdt_descriptor descriptor;
 
@@ -70,15 +73,9 @@ void setup_gdt(void) {
 	descriptor.size = GDT_TABLE_SIZE*sizeof(struct gdt_entry)-1;
 	descriptor.addr = (uint32_t)gdt_table;
 
+	memset((char*)&main_tss, sizeof(struct tss), 0);
 	main_tss.esp0 = stack_top;
-	main_tss.ss0 = DATA_SELECTOR;
-	main_tss.esp1 = 0;
-	main_tss.reserved1 = 0;
-	main_tss.reserved2 = 0;
-	main_tss.reserved3 = 0;
-	for (int i = 0; i < 32; i++) {
-		main_tss.reserved4[i] = 0;
-	}
+	main_tss.ss0 = DATA_SELECTOR;	
 
 	populate_gdt_entry(gdt_table, 0, 0, 0, NULL_SEGMENT);
 	populate_gdt_entry(gdt_table+1, 0, 0xFFFFF, FOUR_KB_BLOCKS | PROTECTED_MODE, CODE_SEGMENT);

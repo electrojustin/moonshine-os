@@ -2,12 +2,14 @@
 #define ARCH_I386_INTERRUPTS_ERROR_INTERRUPTS_H
 
 #include "lib/std/stdio.h"
+#include "lib/std/string.h"
 
 namespace arch {
 namespace interrupts {
 
 namespace {
 	using lib::std::panic;
+	using lib::std::sprintnk;
 }
 
 __attribute__((interrupt)) void divide_by_zero(struct interrupt_frame* frame) {
@@ -46,8 +48,10 @@ __attribute__((interrupt)) void general_protection_fault(struct interrupt_frame*
 	panic((char*)"General protection fault!");
 }
 
-__attribute__((interrupt)) void page_fault(struct interrupt_frame* frame) {
-	panic((char*)"Page fault!");
+__attribute__((interrupt)) void page_fault(struct interrupt_frame* frame, uint32_t error_code) {
+	char buf[100];
+	sprintnk(buf, 100, "Page fault! Error code: %x", error_code);
+	panic(buf);
 }
 
 __attribute__((interrupt)) void simd_exception(struct interrupt_frame* frame) {

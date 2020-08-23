@@ -56,7 +56,9 @@ struct process {
 	struct process_memory_segment* segments;
 	uint32_t num_segments;
 	
-	uint32_t esp; // Pointer to the top of the stack
+	uint32_t esp; // Saved esp from the process
+
+	uint32_t kernel_stack_top;
 
 	struct tls_segment* tls_segments;
 	int num_tls_segments;

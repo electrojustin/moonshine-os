@@ -41,9 +41,10 @@ extern "C" __attribute__((cdecl)) void save_processor_state(uint32_t call_addr, 
 	}
 }
 
-void restore_processor_state(uint32_t esp) {
-	main_tss.esp0 = esp; // This isn't correct...
+void restore_processor_state(uint32_t esp, uint32_t kernel_stack_top) {
+	main_tss.esp0 = kernel_stack_top;
 	flush_tss();
+
 	asm volatile(
 		"mov %0, %%esp\n"
 		"mov is_sse_enabled, %%eax\n"
