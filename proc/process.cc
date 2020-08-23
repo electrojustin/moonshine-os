@@ -136,13 +136,13 @@ void execute_new_process(void) {
 constexpr uint32_t STACK_ALIGNMENT = 0x4;
 
 uint32_t setup_initial_stack(int argc, char** argv, uint32_t stack_top_virtual, char* stack_top_physical) {
-	uint32_t setup_size = sizeof(int);// + sizeof(char**) + sizeof(uint32_t*); // argc, argv, aux
+	uint32_t setup_size = sizeof(int);
 	for (int i = 0; i < argc; i++) {
 		setup_size += strlen(argv[i]) + 1 + sizeof(char*); // Add in the size of all the argvs
 	}
 	setup_size += sizeof(char*); // Argvs are null terminated
 	setup_size += sizeof(char*); // Leave room for env
-	setup_size += 2*sizeof(uint32_t) + sizeof(uint64_t*) + sizeof(uint64_t); // Leave room for an aux vector with dl_random
+	setup_size += 2*sizeof(uint32_t) + sizeof(uint64_t*) + sizeof(uint64_t); // Leave room for an aux vector with stack canary
 
 	// Pad the stack so that we will be aligned
 	uint32_t pad_size = STACK_ALIGNMENT - (setup_size % STACK_ALIGNMENT);
@@ -182,6 +182,9 @@ uint32_t setup_initial_stack(int argc, char** argv, uint32_t stack_top_virtual, 
 	// We already populated argv above, skip these bytes
 	stack_top_virtual -= (argc+2)*sizeof(char*);
 	stack_top_physical -= (argc+2)*sizeof(char*);
+
+	// Note that we don't actually push a pointer to argv or auxvector onto the stack, even though it looks like we should based on _libc_start_main's source code.
+	// I guess this is handled by start.S?
 
 	// Initialize the argc
 	stack_top_virtual -= sizeof(int);
