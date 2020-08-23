@@ -46,6 +46,9 @@ using lib::std::strlen;
 
 volatile struct process* process_list = nullptr;
 
+constexpr uint32_t AT_RANDOM = 25;
+constexpr uint64_t STACK_CANARY = 0xDEADBEEFDEADBEEF;
+
 void cleanup_process(struct process* to_cleanup) {
 	for (int i = 0; i < to_cleanup->num_segments; i++) {
 		kfree(to_cleanup->segments[i].actual_address);
@@ -96,9 +99,9 @@ void execute_new_process(void) {
 	// Set up the temporary thread local storage (TLS)
 	set_tls(process_list->tls_segments[process_list->tls_segment_index]);
 
+	// Set the TSS segment to point to this process's kernel stackk
 	main_tss.esp0 = process_list->kernel_stack_top;
 	flush_tss();
-	lib::std::printk("%x\n", process_list->kernel_stack_top);
 
 	// Setup the MMU to use our process's page tables
 	set_page_directory(process_list->page_dir);
@@ -133,12 +136,13 @@ void execute_new_process(void) {
 constexpr uint32_t STACK_ALIGNMENT = 0x4;
 
 uint32_t setup_initial_stack(int argc, char** argv, uint32_t stack_top_virtual, char* stack_top_physical) {
-	uint32_t setup_size = sizeof(int) + sizeof(char**); // argc and argv
+	uint32_t setup_size = sizeof(int);// + sizeof(char**) + sizeof(uint32_t*); // argc, argv, aux
 	for (int i = 0; i < argc; i++) {
 		setup_size += strlen(argv[i]) + 1 + sizeof(char*); // Add in the size of all the argvs
 	}
 	setup_size += sizeof(char*); // Argvs are null terminated
 	setup_size += sizeof(char*); // Leave room for env
+	setup_size += 2*sizeof(uint32_t) + sizeof(uint64_t*) + sizeof(uint64_t); // Leave room for an aux vector with dl_random
 
 	// Pad the stack so that we will be aligned
 	uint32_t pad_size = STACK_ALIGNMENT - (setup_size % STACK_ALIGNMENT);
@@ -146,9 +150,10 @@ uint32_t setup_initial_stack(int argc, char** argv, uint32_t stack_top_virtual, 
 	stack_top_physical -= pad_size;
 
 	// Initialize the argv
-	char** argv_copy = (char**)(stack_top_physical - setup_size + sizeof(int) + sizeof(char**));
-	argv_copy[argc+1] = nullptr; // Initialize env
-	argv_copy[argc] = nullptr; // Null terminate argv
+	char** argv_copy = (char**)(stack_top_physical - setup_size + sizeof(int));
+	char** argv_copy_virtual = (char**)(stack_top_virtual - setup_size + sizeof(int));
+	argv_copy[argc+1] = 0; // Initialize env
+	argv_copy[argc] = 0; // Null terminate argv
 	for (int i = argc-1; i >= 0; i--) {
 		size_t argv_size = strlen(argv[i]) + 1;
 		stack_top_virtual -= argv_size;
@@ -157,14 +162,26 @@ uint32_t setup_initial_stack(int argc, char** argv, uint32_t stack_top_virtual, 
 		argv_copy[i] = (char*)stack_top_virtual;
 	}
 
+	// Initialize aux vector
+	stack_top_virtual -= sizeof(uint64_t);
+	stack_top_physical -= sizeof(uint64_t);
+	uint64_t* canary_data_physical = (uint64_t*)stack_top_physical;
+	uint64_t* canary_data_virtual = (uint64_t*)stack_top_virtual;
+	*canary_data_physical = STACK_CANARY;
+	stack_top_virtual -= sizeof(uint32_t);
+	stack_top_physical -= sizeof(uint32_t);
+	*(uint32_t*)stack_top_physical = 0;
+	stack_top_virtual -= sizeof(uint64_t*);
+	stack_top_physical -= sizeof(uint64_t*);
+	*(uint64_t**)stack_top_physical = canary_data_virtual;
+	stack_top_virtual -= sizeof(uint32_t);
+	stack_top_physical -= sizeof(uint32_t);
+	*(uint32_t*)stack_top_physical = AT_RANDOM;
+	uint32_t* aux_vector = (uint32_t*)stack_top_virtual;
+
 	// We already populated argv above, skip these bytes
 	stack_top_virtual -= (argc+2)*sizeof(char*);
 	stack_top_physical -= (argc+2)*sizeof(char*);
-
-	// Put the argv pointer onto the stack
-	stack_top_virtual -= argc*sizeof(char**);
-	stack_top_physical -= argc*sizeof(char**);
-	*(char***)stack_top_physical = (char**)(stack_top_virtual - setup_size + sizeof(int) + sizeof(char**));
 
 	// Initialize the argc
 	stack_top_virtual -= sizeof(int);
