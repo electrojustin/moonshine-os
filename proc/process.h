@@ -101,6 +101,8 @@ void set_userspace_page_table(void);
 
 uint32_t assign_pid(void);
 
+void kill_current_process(void);
+
 } // namespace proc
 
 #endif 

@@ -216,6 +216,7 @@ filesystem/fat32.o: filesystem/fat32.cc \
 		    drivers/i386/pata.h \
 		    filesystem/mbr.h \
 		    lib/std/memory.h \
+		    lib/std/stdio.h \
 		    lib/std/string.h
 	gcc $(CFLAGS) -c filesystem/fat32.cc -o filesystem/fat32.o
 filesystem/file.o: filesystem/file.cc \

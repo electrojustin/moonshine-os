@@ -58,10 +58,15 @@ constexpr uint32_t TLS_SEGMENT = 7;
 
 char load_elf(char* path, char* working_dir) {
 	struct directory_entry file_info = stat_fat32(path);
-	if (!file_info.name || !file_info.size) {
-		kfree(file_info.name);
+
+	if (!file_info.name) {
 		return 0;
 	}
+	else if (!file_info.size || file_info.is_directory) {
+		kfree(file_info.name);
+		return 0;
+	}	
+
 	kfree(file_info.name);
 
 	// Load executable into memory

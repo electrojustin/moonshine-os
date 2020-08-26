@@ -3,6 +3,7 @@
 #include "lib/std/time.h"
 #include "proc/process.h"
 #include "proc/sleep.h"
+#include "lib/std/stdio.h"
 
 namespace proc {
 
@@ -37,6 +38,10 @@ uint32_t nanosleep(uint32_t req_addr, uint32_t rem_addr, uint32_t reserved1, uin
 	kfree(wait_time);
 
 	return 0;
+}
+
+uint32_t clock_nanosleep(uint32_t clock_id, uint32_t flags, uint32_t req_addr, uint32_t rem_addr, uint32_t reserved1) {
+	return nanosleep(req_addr, rem_addr, 0, 0, 0);
 }
 
 } // namespace proc

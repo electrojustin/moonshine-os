@@ -1,16 +1,20 @@
 #include <stdarg.h>
 
+#include "arch/i386/memory/paging.h"
 #include "io/keyboard.h"
 #include "io/vga.h"
 #include "lib/std/memory.h"
 #include "lib/std/stdio.h"
 #include "lib/std/string.h"
+#include "proc/process.h"
 
 namespace lib {
 namespace std {
 
 namespace {
 
+using arch::memory::set_page_directory;
+using arch::memory::virtual_to_physical;
 using io::VGA_COLOR_LIGHT_GREY;
 using io::VGA_COLOR_BLACK;
 using io::VGA_HEIGHT;
@@ -23,6 +27,8 @@ using io::key_presses;
 using io::get_pressed_keys;
 using io::get_ascii_mapping;
 using io::is_shift;
+using proc::get_currently_executing_process;
+using proc::process;
 
 uint8_t terminal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
@@ -122,8 +128,12 @@ int printk(const char* format, ...) {
 }
 
 // Unroll stack and print to console.
-void print_stack_trace(void) {
-	current_ebp = (void*)0xFFFFFFFF;
+void print_stack_trace(void* current_ebp) {
+	set_page_directory(base_page_directory);
+
+	struct process* current_process = proc::get_currently_executing_process();
+	uint32_t* page_dir = current_process->page_dir;
+
 	original_ebp = nullptr;
 
 	// Save ebp
@@ -134,12 +144,14 @@ void print_stack_trace(void) {
 	// x86 ABI says the last ebp is stored at the memory address the current one points to.
 	// The stored eip is stored directly above ebp.
 	// This prints the eip and uses ebp to unroll the stack.
-	while (current_ebp != &stack_top && current_ebp) {
-		asm volatile(
-			"mov %%ebp, %0\n"
-			"mov (%%ebp), %%ebp"
-			: "=r" (current_ebp));
-		printk("From %x\n", *((uint32_t*)current_ebp+1));
+	for (int i = 0; i < 10 && current_ebp != &stack_top && current_ebp; i++) {
+		printk("From %x\n", *(((uint32_t*)current_ebp)+1));
+		void* tentative_ebp_addr = virtual_to_physical(page_dir, current_ebp);
+		if (tentative_ebp_addr) {
+			current_ebp = *(void**)tentative_ebp_addr;
+		} else {
+			current_ebp = *(void**)current_ebp;
+		}
 	}
 
 	// Restore the original ebp.

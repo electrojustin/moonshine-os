@@ -17,6 +17,7 @@ using lib::std::kmalloc;
 using lib::std::kmalloc_aligned;
 using lib::std::krealloc;
 using lib::std::memset;
+using lib::std::panic;
 using lib::std::strlen;
 
 } // namespace
@@ -86,7 +87,16 @@ void* virtual_to_physical(uint32_t* page_dir, void* virtual_addr) {
 	uint32_t page_table_index = ((uint32_t)virtual_addr >> 12) & 0x3FF;
 	uint32_t offset = (uint32_t)virtual_addr & 0xFFF;
 	uint32_t* page_table = (uint32_t*)(page_dir[page_dir_index] & (~(0xFFF)));
+
+	if (page_table == nullptr) {
+		return nullptr;
+	}
+
 	char* return_addr = (char*)(page_table[page_table_index] & (~(0xFFF)));
+
+	if (return_addr == nullptr) {
+		return nullptr;
+	}
 
 	return (void*)(return_addr + offset);
 }
@@ -97,6 +107,9 @@ void physical_to_virtual_memcpy(uint32_t* page_dir, char* src, char* dest, size_
 	while (current < size) {
 		if (!((uint32_t)(physical_dest) & (PAGE_SIZE-1))) {
 			physical_dest = (char*)virtual_to_physical(page_dir, (void*)dest);
+			if (!physical_dest) {
+				panic("Null pointer exception!");
+			}
 		}
 
 		*physical_dest = *src;
@@ -113,6 +126,9 @@ void virtual_to_physical_memcpy(uint32_t* page_dir, char* src, char* dest, size_
 	while (current < size) {
 		if (!((uint32_t)(physical_src) & (PAGE_SIZE-1))) {
 			physical_src = (char*)virtual_to_physical(page_dir, (void*)src);
+			if (!physical_src) {
+				panic("Null pointer exception!");
+			}
 		}
 
 		*dest = *physical_src;

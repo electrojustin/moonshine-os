@@ -59,22 +59,31 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3, uint32
 	new_proc->segments = (struct process_memory_segment*)kmalloc(new_proc->num_segments*sizeof(struct process_memory_segment));
 	for (int i = 0; i < new_proc->num_segments; i++) {
 		new_proc->segments[i].flags = parent_proc->segments[i].flags;
-		new_proc->segments[i].virtual_address = parent_proc->segments[i].virtual_address;
+		if (parent_proc->segments[i].virtual_address) {
+			new_proc->segments[i].virtual_address = parent_proc->segments[i].virtual_address;
+		} else {
+			new_proc->segments[i].virtual_address = nullptr;
+		}
 		new_proc->segments[i].segment_size = parent_proc->segments[i].segment_size;
 		new_proc->segments[i].alloc_size = parent_proc->segments[i].alloc_size;
 
 		new_proc->segments[i].actual_address = kmalloc_aligned(parent_proc->segments[i].alloc_size, PAGE_SIZE);
 		memcpy((char*)parent_proc->segments[i].actual_address, (char*)new_proc->segments[i].actual_address, new_proc->segments[i].alloc_size);
 
-		size_t page_offset = ((uint32_t)new_proc->segments[i].virtual_address & (PAGE_SIZE-1));
+		uint32_t virtual_address = (uint32_t)new_proc->segments[i].virtual_address;
+		if (!virtual_address) {
+			virtual_address = (uint32_t)new_proc->segments[i].actual_address;
+			new_proc->kernel_stack_top = (virtual_address + new_proc->segments[i].segment_size) & 0xFFFFFFFC;
+		}
+		size_t page_offset = virtual_address & (PAGE_SIZE-1);
 		map_memory_segment(new_proc,
 				   (uint32_t)new_proc->segments[i].actual_address,
-				   (uint32_t)new_proc->segments[i].virtual_address - page_offset,
+				   virtual_address - page_offset,
 				   new_proc->segments[i].alloc_size,
 				   user_read_write);
 	}
 
-	new_proc->esp = parent_proc->esp;
+	new_proc->esp = new_proc->kernel_stack_top - (parent_proc->kernel_stack_top - parent_proc->esp);
 
 	new_proc->num_tls_segments = parent_proc->num_tls_segments;
 	new_proc->tls_segments = (struct tls_segment*)kmalloc(sizeof(struct tls_segment) * new_proc->num_tls_segments);
@@ -109,11 +118,15 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3, uint32
 	parent_proc->next = new_proc;
 	new_proc->prev = parent_proc;
 
-	uint32_t* esp_actual = (uint32_t*)virtual_to_physical(new_proc->page_dir, (void*)new_proc->esp);
+	// We don't need to do any gymnastics with virtual and physical memory here because we always identity page the kernel stack
+	// But, we gotta fix any saved kernel stack pointers
+	uint32_t* esp_actual = (uint32_t*)new_proc->esp;
 	if (is_sse_enabled) {
-		esp_actual = (uint32_t*)virtual_to_physical(new_proc->page_dir, (void*)*esp_actual);
+		uint32_t old_esp_actual = *(uint32_t*)parent_proc->esp;
+		*esp_actual = new_proc->kernel_stack_top - (parent_proc->kernel_stack_top - old_esp_actual);
+		esp_actual = (uint32_t*)*esp_actual;
 	}
-	esp_actual[7] = new_proc->pid;
+	esp_actual[7] = 0;
 
 	advance_process_queue();
 

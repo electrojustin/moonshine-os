@@ -33,9 +33,9 @@ char getc(void);
 
 int printk(const char* format, ...);
 
-void print_stack_trace(void);
+void print_stack_trace(void* current_ebp);
 
-static inline void panic(const char* message) {
+static inline void print_error(const char* message, uint32_t provided_ebp=0) {
 	// Dump registers.
 	asm volatile(
 		"mov %%esp, %0\n"
@@ -47,13 +47,21 @@ static inline void panic(const char* message) {
 		"mov %%esi, %6\n"
 		"mov %%edi, %7\n"
 		: "=m" (esp), "=m" (ebp), "=m" (eax), "=m" (ebx), "=m" (ecx), "=m" (edx), "=m" (esi), "=m" (edi));
-	printk("Kernel panic! Error: %s\n", message);
+	if (provided_ebp) {
+		ebp = provided_ebp;
+	}
+	printk("Error: %s\n", message);
 	printk("esp: %x   ebp: %x\n", esp, ebp);
 	printk("eax: %x   ebx; %x   ecx: %x\n", eax, ebx, ecx);
 	printk("edx: %x   esi: %x   edi: %x\n", edx, esi, edi);
 
 	// Print the stack.
-	print_stack_trace();
+	print_stack_trace((void*)ebp);
+}
+
+static inline void panic(const char* message) {
+	printk("Kernel panic!\n");
+	print_error(message);
 
 	// Halt forever.
 	while (1) {

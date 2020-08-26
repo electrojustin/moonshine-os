@@ -262,9 +262,7 @@ char spawn_new_process(char* path, struct process_memory_segment* segments, uint
 		new_proc->segments[i].actual_address = kmalloc_aligned(alloc_size, PAGE_SIZE);
 		memset((char*)new_proc->segments[i].actual_address, alloc_size, 0);
 
-		if (new_proc->segments[i].virtual_address == nullptr) {
-			new_proc->segments[i].virtual_address = new_proc->segments[i].actual_address;
-		} else if (new_proc->segments[i].flags == (READABLE_MEMORY | WRITEABLE_MEMORY)) {
+		if (new_proc->segments[i].virtual_address && new_proc->segments[i].flags == (READABLE_MEMORY | WRITEABLE_MEMORY)) {
 			new_proc->brk = ((uint32_t)new_proc->segments[i].virtual_address & (~(PAGE_SIZE-1))) + alloc_size;
 			new_proc->actual_brk = new_proc->brk;
 		}
@@ -274,7 +272,7 @@ char spawn_new_process(char* path, struct process_memory_segment* segments, uint
 		}
 	}
 
-	new_proc->kernel_stack_top = ((uint32_t)kernel_stack_segment->virtual_address + kernel_stack_segment->segment_size) & 0xFFFFFFFC;
+	new_proc->kernel_stack_top = ((uint32_t)kernel_stack_segment->actual_address + kernel_stack_segment->segment_size) & 0xFFFFFFFC;
 
 	// Add a temporary TLS
 	// There's a bug in GNU libc that lets it make software syscalls before it sets up the TLS under specific circumstances
@@ -307,7 +305,11 @@ char spawn_new_process(char* path, struct process_memory_segment* segments, uint
 	new_proc->num_page_tables = 0;
 	new_proc->page_tables = nullptr;
 	for (int i = 0; i < new_proc->num_segments; i++) {
-		size_t page_offset = ((uint32_t)new_proc->segments[i].virtual_address & (PAGE_SIZE-1));
+		uint32_t virtual_address = (uint32_t)new_proc->segments[i].virtual_address;
+		if (!virtual_address) {
+			virtual_address = (uint32_t)new_proc->segments[i].actual_address;
+		}
+		size_t page_offset = virtual_address & (PAGE_SIZE-1);
 		size_t alloc_size = new_proc->segments[i].alloc_size;
 		uint32_t num_pages = alloc_size / PAGE_SIZE;
 		if (alloc_size & (PAGE_SIZE-1)) {
@@ -315,7 +317,7 @@ char spawn_new_process(char* path, struct process_memory_segment* segments, uint
 		}
 		map_memory_segment(new_proc,
 				   (uint32_t)new_proc->segments[i].actual_address,
-				   (uint32_t)new_proc->segments[i].virtual_address - page_offset,
+				   virtual_address - page_offset,
 				   alloc_size,
 				   user_read_write);
 	}
@@ -348,7 +350,11 @@ char spawn_new_process(char* path, struct process_memory_segment* segments, uint
 	return 1;
 }	
 
-void execute_processes(void) {
+void __attribute__((naked)) execute_processes(void) {
+	asm volatile(
+		"mov $stack_top, %esp\n"
+		"mov %esp, %ebp");
+
 	while (process_list) {
 		if (process_list->process_state == STOPPED) {
 			process_list = process_list->next;
@@ -374,6 +380,8 @@ void execute_processes(void) {
 
 			// All processes are waiting, hlt to save power
 			if (process_list == current_proc) {
+				main_tss.esp0 = (uint32_t)&stack_top;
+				flush_tss();
 				asm volatile(
 					"sti\n"
 					"hlt\n");
@@ -409,6 +417,11 @@ uint32_t assign_pid(void) {
 	uint32_t ret = next_pid;
 	next_pid++;
 	return ret;
+}
+
+void kill_current_process(void) {
+	get_currently_executing_process()->process_state = STOPPED;
+	execute_processes();
 }
 
 } // namespace proc

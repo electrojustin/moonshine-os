@@ -114,7 +114,7 @@ void kernel_main(multiboot_info_t* multiboot_info, unsigned int magic) {
 
 	filesystem::init_fat32(drivers::devices[0], filesystem::disk_partitions[0]);
 
-	proc::initialize_syscalls(0x181);
+	proc::initialize_syscalls(0x198);
 	proc::register_syscall(0x01, proc::exit);
 	proc::register_syscall(0x02, proc::fork);
 	proc::register_syscall(0x03, proc::read);
@@ -144,6 +144,7 @@ void kernel_main(multiboot_info_t* multiboot_info, unsigned int magic) {
 	proc::register_syscall(0xF4, proc::get_thread_area);
 	proc::register_syscall(0x127, proc::openat);
 	proc::register_syscall(0x180, proc::arch_prctl);
+	proc::register_syscall(0x197, proc::clock_nanosleep);
 
 	// Initialize the Programmable Interrupt Timer with interrupt 0x20.
 	drivers::init_pit(0x20, 1000);

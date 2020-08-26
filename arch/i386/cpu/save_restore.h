@@ -37,12 +37,7 @@ void restore_processor_state(uint32_t esp, uint32_t kernel_stack_top);
 		"mov %esp, %ecx\n" \
 		"push %ecx\n" \
 		"push $" #exit_name "\n" \
-		"call save_processor_state\n" \
-		"pop %eax\n" \
-		"pop %esp\n" \
-		"popal\n" \
-		"sti\n" \
-		"iret\n");
+		"call save_processor_state\n");
 
 } // namespace cpu
 } // namespace arch

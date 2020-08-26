@@ -74,7 +74,7 @@ void setup_gdt(void) {
 	descriptor.addr = (uint32_t)gdt_table;
 
 	memset((char*)&main_tss, sizeof(struct tss), 0);
-	main_tss.esp0 = stack_top;
+	main_tss.esp0 = (uint32_t)&stack_top;
 	main_tss.ss0 = DATA_SELECTOR;	
 
 	populate_gdt_entry(gdt_table, 0, 0, 0, NULL_SEGMENT);
