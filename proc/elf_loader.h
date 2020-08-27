@@ -3,7 +3,7 @@
 
 namespace proc {
 
-char load_elf(char* path, char* working_dir="/");
+char load_elf(char* path, int argc, char** argv, char* working_dir="/");
 
 } // namespace proc
 

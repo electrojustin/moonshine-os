@@ -85,7 +85,9 @@ constexpr uint32_t DEFAULT_CODE_START = 0x80000000;
 constexpr uint32_t DEFAULT_STACK_BOTTOM = 0xC0000000;
 constexpr uint32_t DEFAULT_STACK_SIZE = 0x10000;
 
-char spawn_new_process(char* path, 
+char spawn_new_process(char* path,
+		       int argc,
+		       char** argv,
 		       struct process_memory_segment* segments, 
 		       uint32_t num_segments, 
 		       void (*entry_address)(void),

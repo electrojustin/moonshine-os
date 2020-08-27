@@ -150,7 +150,8 @@ void kernel_main(multiboot_info_t* multiboot_info, unsigned int magic) {
 	drivers::init_pit(0x20, 1000);
 
 	// Load the initial process
-	proc::load_elf("/init.exe");
+	char* argv[] = {"/init.exe", nullptr};
+	proc::load_elf("/init.exe", 1, argv);
 
 	// Execute processes
 	proc::execute_processes();

@@ -56,7 +56,7 @@ constexpr uint32_t TLS_SEGMENT = 7;
 
 } // namespace
 
-char load_elf(char* path, char* working_dir) {
+char load_elf(char* path, int argc, char** argv, char* working_dir) {
 	struct directory_entry file_info = stat_fat32(path);
 
 	if (!file_info.name) {
@@ -115,7 +115,7 @@ char load_elf(char* path, char* working_dir) {
 	}
 
 	// Spawn the process
-	char ret = spawn_new_process(path, process_segments, num_loadable_segments, (void(*)())header->entry, working_dir);
+	char ret = spawn_new_process(path, argc, argv, process_segments, num_loadable_segments, (void(*)())header->entry, working_dir);
 	kfree(process_segments);
 	kfree(file_buf);
 	return ret;

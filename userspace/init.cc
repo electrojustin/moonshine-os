@@ -3,7 +3,8 @@
 
 int main(void) {
 	if (!fork()) {
-		execve("test.exe", nullptr, nullptr);
+		char* argv[] = {"test.exe", "--my_flag", nullptr};
+		execve("test.exe", argv, nullptr);
 	} else {
 		printf("Old process\n");
 		while(1) {

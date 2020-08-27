@@ -207,7 +207,7 @@ uint32_t next_pid = 1;
 
 } // namespace
 
-char spawn_new_process(char* path, struct process_memory_segment* segments, uint32_t num_segments, void (*entry_address)(void), char* working_dir) {
+char spawn_new_process(char* path, int argc, char** argv, struct process_memory_segment* segments, uint32_t num_segments, void (*entry_address)(void), char* working_dir) {
 	disable_interrupts();
 
 	// Check to make sure we aren't allocating kernel memory
@@ -291,9 +291,8 @@ char spawn_new_process(char* path, struct process_memory_segment* segments, uint
 
 	// Set up the initial stack with argc and argv
 	uint32_t stack_top_physical = new_proc->esp - (uint32_t)stack_segment->virtual_address + (uint32_t)stack_segment->actual_address;
-	new_proc->argc = 1;
-	new_proc->argv = (char**)kmalloc(new_proc->argc*sizeof(char*));
-	new_proc->argv[0] = make_string_copy(path);
+	new_proc->argc = argc;
+	new_proc->argv = argv;
 	new_proc->esp = setup_initial_stack(new_proc->argc, new_proc->argv, new_proc->esp, (char*)stack_top_physical);
 
 	// Set up page directory
