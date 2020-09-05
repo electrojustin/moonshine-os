@@ -110,7 +110,7 @@ uint32_t cluster_size; // In bytes
 uint32_t cluster_sectors; // Size in sectors
 uint32_t root_dir_cluster; // In clusters
 
-void read_file_clusters(uint32_t cluster, uint8_t* buf, size_t len) {
+uint32_t read_clusters(uint32_t cluster, uint8_t* buf, size_t len) {
 	uint8_t* tmp_buf = (uint8_t*)kmalloc(cluster_size);
 	size_t bytes_read = 0;
 
@@ -119,8 +119,10 @@ void read_file_clusters(uint32_t cluster, uint8_t* buf, size_t len) {
 		bytes_read += cluster_size;
 
 		if (bytes_read > len) {
-			size_t remaining_bytes = cluster_size - (bytes_read - len);
+			bytes_read -= cluster_size;
+			size_t remaining_bytes = len - bytes_read;
 			memcpy((char*)tmp_buf, (char*)buf, remaining_bytes);
+			bytes_read += remaining_bytes;
 			break;
 		} else {
 			memcpy((char*)tmp_buf, (char*)buf, cluster_size);
@@ -135,18 +137,24 @@ void read_file_clusters(uint32_t cluster, uint8_t* buf, size_t len) {
 	}
 
 	kfree(tmp_buf);
+
+	return bytes_read;
 }
 
 void write_clusters(uint32_t cluster, uint8_t* buf, size_t len) {
-	uint8_t* padded_buf = (uint8_t*)kmalloc(((len / cluster_size) + 1) * cluster_size);
-	uint8_t* padded_buf_alloc = padded_buf;
-	memcpy((char*)buf, (char*)padded_buf, len);
+	uint32_t index = 0;
+	uint8_t* temp_buf = (uint8_t*)kmalloc(cluster_size);
 	do {
-		write_sectors(*device, padded_buf, cluster_sectors, cluster_start + (cluster-2)*cluster_sectors);
-		cluster = file_allocation_table[cluster];
-		padded_buf += cluster_size;
-	} while (cluster < END_OF_FILE_CLUSTER);
-	kfree(padded_buf_alloc);
+		uint32_t copy_size = (len - index) < cluster_size ? len - index : cluster_size;
+		memcpy((char*)buf+index, (char*)temp_buf, copy_size);
+		if (copy_size < cluster_size) {
+			memset((char*)temp_buf+copy_size, cluster_size - copy_size, 0);
+		}
+		write_sectors(*device, temp_buf, cluster_sectors, cluster_start + (cluster-2)*cluster_sectors);
+		cluster = file_allocation_table[cluster] & 0x0FFFFFFF;
+		index += cluster_size;
+	} while (index < len && cluster < END_OF_FILE_CLUSTER);
+	kfree(temp_buf);
 }
 
 void parse_eight_three_filename(const char* filename, char* parsed_filename) {
@@ -278,7 +286,7 @@ uint32_t parse_long_filename(char* buf, char** filename) {
 	return i; // We want to return i rather than parts_len here in case there was a deleted entry
 }
 
-struct directory_table_entry find_directory_entry(char* path, uint32_t current_cluster=root_dir_cluster) {
+struct directory_table_entry find_directory_entry(char* path, uint32_t current_cluster=root_dir_cluster, char return_long_filenames=true, uint32_t* dir_table_cluster=nullptr, uint8_t** dir_table_buf=nullptr) {
 	struct directory_table_entry ret;
 	ret.filename[0] = 0;
 	ret.reserved = 0;
@@ -296,7 +304,7 @@ struct directory_table_entry find_directory_entry(char* path, uint32_t current_c
 	}
 
 	struct directory_table_entry* dir_table = (struct directory_table_entry*)kmalloc(cluster_size);
-	read_file_clusters(current_cluster, (uint8_t*)dir_table, cluster_size);
+	read_clusters(current_cluster, (uint8_t*)dir_table, cluster_size);
 	char eight_three_filename[12] = {0};
 	parse_eight_three_filename(current_name, eight_three_filename);
 	char* long_filename = nullptr;
@@ -314,9 +322,13 @@ struct directory_table_entry find_directory_entry(char* path, uint32_t current_c
 		} else if (dir_table[i].attributes == LONG_FILE_NAME) {
 			uint32_t num_entries = parse_long_filename((char*)&dir_table[i], &long_filename);
 			if (streq(long_filename, current_name, 13*num_entries)) {
-				ret = dir_table[i+num_entries];
-				ret.reserved = 1; // TODO: this is hacky, find a proper solution
-				*(char**)&ret.filename = long_filename;
+				if (return_long_filenames) {
+					ret = dir_table[i+num_entries];
+					ret.reserved = 1; // TODO: this is hacky, find a proper solution
+					*(char**)&ret.filename = long_filename;
+				} else {
+					kfree(long_filename);
+				}
 				break;
 			}
 			kfree(long_filename);
@@ -324,18 +336,24 @@ struct directory_table_entry find_directory_entry(char* path, uint32_t current_c
 			i += num_entries;
 		}
 	}
-	kfree(dir_table);
 
 	if (next_dir < 0) {
+		if (!dir_table_buf) {
+			kfree(dir_table);
+		} else {
+			*dir_table_buf = (uint8_t*)dir_table;
+			*dir_table_cluster = current_cluster;
+		}
 		return ret;
 	} else {
+		kfree(dir_table);
+		if (long_filename) {
+			kfree(long_filename);
+		}
 		if (!(ret.attributes & DIRECTORY_FLAG)) {
 			ret.filename[0] = 0;
 			return ret;
 		} else {
-			if (long_filename) {
-				kfree(long_filename);
-			}
 			kfree(current_name);
 			uint32_t next_cluster = convert_cluster(ret);
 			return find_directory_entry(path + next_dir, next_cluster);
@@ -391,6 +409,18 @@ void dealloc_clusters(uint32_t cluster) {
 		file_allocation_table[cluster] = 0;
 		cluster = next_cluster;
 	} while ((cluster & 0x0FFFFFFF) < END_OF_FILE_CLUSTER);
+	flush_fat();
+}
+
+void dealloc_clusters(uint32_t cluster, int num) {
+	for (int i = 0; i < num; i++) {
+		if ((cluster & 0x0FFFFFFF) >= END_OF_FILE_CLUSTER) {
+			break;
+		}
+		uint32_t next_cluster = file_allocation_table[cluster];
+		file_allocation_table[cluster] = 0;
+		cluster = next_cluster;
+	}
 	flush_fat();
 }
 
@@ -478,7 +508,7 @@ char add_directory_entry(char* dir_path, char* name, uint32_t attributes, size_t
 	int num_dir_entries = 1 + num_long_filename_entries;
 
 	struct directory_table_entry* dir_table = (struct directory_table_entry*)kmalloc(cluster_size);
-	read_file_clusters(dir_cluster, (uint8_t*)dir_table, cluster_size);
+	read_clusters(dir_cluster, (uint8_t*)dir_table, cluster_size);
 	int i = 0;
 	int contiguous_free_entries = 0;
 	for (i = 0; i < cluster_size/sizeof(struct directory_table_entry); i++) {
@@ -540,11 +570,41 @@ void init_fat32(struct ide_device& _device, struct partition& partition) {
 char read_fat32(char* path, uint8_t* buf, size_t len) {
 	uint32_t cluster = find_cluster(path, root_dir_cluster);
 	if (cluster != INVALID_CLUSTER) {
-		read_file_clusters(cluster, buf, len);
+		read_clusters(cluster, buf, len);
 		return 1;
 	} else {
 		return 0;
 	}
+}
+
+uint32_t read_fat32(uint32_t inode, uint32_t offset, uint8_t* buf, size_t len) {
+	uint32_t cluster = inode;
+	int index;
+	for (index = 0; index + cluster_size < offset && (cluster & 0x0FFFFFFF) < END_OF_FILE_CLUSTER; index += cluster_size) {
+		cluster = file_allocation_table[cluster] & 0x0FFFFFFF;
+	}
+
+	if ((cluster & 0x0FFFFFFF) >= END_OF_FILE_CLUSTER) {
+		return 0;
+	}
+
+	uint8_t* temp_buf = (uint8_t*)kmalloc(cluster_size);
+	uint32_t temp_len = read_clusters(cluster, temp_buf, cluster_size);
+	for (int i = offset - index; i < temp_len; i++) {
+		*buf = temp_buf[i];
+		buf++;
+	}
+	kfree(temp_buf);
+
+	cluster = file_allocation_table[cluster] & 0x0FFFFFFF;
+
+	if (cluster >= END_OF_FILE_CLUSTER) {
+		return temp_len - (offset - index);
+	}
+
+	len -= temp_len - (offset - index);
+
+	return (temp_len - (offset - index)) + read_clusters(cluster, buf, len);
 }
 
 struct directory_entry stat_fat32(char* path) {
@@ -555,6 +615,7 @@ struct directory_entry stat_fat32(char* path) {
 		ret.read_only = 0;
 		ret.is_directory = 1;
 		ret.size = cluster_size;
+		ret.inode = root_dir_cluster;
 		return ret;
 	}
 	
@@ -569,6 +630,7 @@ struct directory_entry stat_fat32(char* path) {
 		ret.read_only = !!(entry.attributes & READ_ONLY_FLAG);
 		ret.is_directory = !!(entry.attributes & DIRECTORY_FLAG);
 		ret.size = entry.file_size;
+		ret.inode = convert_cluster(entry);
 	} else {
 		ret.name = nullptr;
 		ret.size = 0;
@@ -588,7 +650,7 @@ struct directory ls_fat32(char* path) {
 	}
 
 	struct directory_table_entry* dir_table = (struct directory_table_entry*)kmalloc(cluster_size);
-	read_file_clusters(cluster, (uint8_t*)dir_table, cluster_size);
+	read_clusters(cluster, (uint8_t*)dir_table, cluster_size);
 	uint32_t num_children = 0;
 	for (int i = 0; i < cluster_size/sizeof(struct directory_table_entry); i++) {
 		if (!dir_table[i].filename[0]) {
@@ -624,7 +686,7 @@ struct directory ls_fat32(char* path) {
 	return ret;
 }
 
-char write_fat32(char* path, uint8_t attributes, uint8_t* buf, size_t len) {
+uint32_t write_new_fat32(char* path, uint8_t attributes, uint8_t* buf, size_t len) {
 	del_fat32(path);
 	uint32_t cluster = alloc_cluster(len);
 	if (cluster == INVALID_CLUSTER) {
@@ -648,13 +710,87 @@ char write_fat32(char* path, uint8_t attributes, uint8_t* buf, size_t len) {
 		write_clusters(cluster, buf, len);
 		kfree(dir_path);
 		kfree(name);
-		return 1;
+		return cluster;
 	} else {
 		dealloc_clusters(cluster);
 		kfree(dir_path);
 		kfree(name);
 		return 0;
 	}
+}
+
+char update_file_length(char* path, size_t new_len) {
+	uint8_t* buf = nullptr;
+	uint32_t cluster = INVALID_CLUSTER;
+	struct directory_table_entry entry = find_directory_entry(path, root_dir_cluster, false, &cluster, &buf);
+
+	if (!buf) {
+		return 0;
+	}
+
+	struct directory_table_entry* table = (struct directory_table_entry*)buf;
+	for (int i = 0; i < cluster_size/sizeof(struct directory_table_entry); i++) {
+		if (streq(entry.filename, table[i].filename, 11)) {
+			table[i].file_size = new_len;
+			write_clusters(cluster, buf, cluster_size);
+			kfree(buf);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+uint32_t write_fat32(char* path, uint32_t offset, uint8_t* buf, size_t len) {
+	uint32_t cluster = find_cluster(path, root_dir_cluster);
+	uint32_t last_cluster = cluster;
+
+	if ((cluster & 0x0FFFFFFF) >= END_OF_FILE_CLUSTER) {
+		return 0;
+	}
+
+	uint64_t index = 0;
+	for (index; index + cluster_size < offset && (cluster & 0x0FFFFFFF) < END_OF_FILE_CLUSTER; index += cluster_size) {
+		last_cluster = cluster;
+		cluster = file_allocation_table[cluster] & 0x0FFFFFFF;
+	}
+	
+	for (index; index < offset + len; index += cluster_size) {
+		if ((cluster & 0x0FFFFFFF) >= END_OF_FILE_CLUSTER) {
+			// Pure append operation
+			uint32_t new_cluster = alloc_cluster(len + offset - index);
+			write_clusters(new_cluster, buf + index - offset, len + offset - index);
+			file_allocation_table[last_cluster] = new_cluster;
+			flush_fat();
+			uint32_t new_file_len = len + offset;
+			update_file_length(path, new_file_len);
+			return new_file_len;
+		} else if (index < offset && index + cluster_size > offset) {
+			uint8_t* temp_buf = (uint8_t*)kmalloc(cluster_size);
+			read_clusters(cluster, temp_buf, cluster_size);
+			for (int i = offset - index; i < cluster_size; i++) {
+				temp_buf[i] = buf[index - offset + i];
+			}
+			write_clusters(cluster, temp_buf, cluster_size);
+			kfree(temp_buf);
+		} else if (index < offset + len && index + cluster_size > offset + len) {
+			uint8_t* temp_buf = (uint8_t*)kmalloc(cluster_size);
+			read_clusters(cluster, temp_buf, cluster_size);
+			for (int i = 0; i < len - (index - offset); i++) {
+				temp_buf[i] = buf[index - offset + i];
+			}
+			write_clusters(cluster, temp_buf, cluster_size);
+			kfree(temp_buf);
+			return 1;
+		} else {
+			write_clusters(cluster, buf + index - offset, cluster_size);
+		}
+
+		last_cluster = cluster;
+		cluster = file_allocation_table[cluster] & 0x0FFFFFFF;	
+	}
+
+	return 1;
 }
 
 char mkdir_fat32(char* path) {
@@ -740,7 +876,7 @@ char del_fat32(char* path) {
 
 	int dir_entry_index = -1;
 	struct directory_table_entry* dir_table = (struct directory_table_entry*)kmalloc(cluster_size);
-	read_file_clusters(parent_cluster, (uint8_t*)dir_table, cluster_size);
+	read_clusters(parent_cluster, (uint8_t*)dir_table, cluster_size);
 	char eight_three_filename[12] = {0};
 	parse_eight_three_filename(name, eight_three_filename);
 	char* long_filename = nullptr;

@@ -8,14 +8,11 @@ namespace proc {
 namespace {
 
 using filesystem::file;
-using filesystem::flush_file;
 using lib::std::kfree;
 
 } // namespace
 
 void close_file(struct process* current_process, struct file* to_close) {
-	flush_file(to_close);
-
 	kfree(to_close->path);
 	if (to_close->buffer) {
 		kfree(to_close->buffer);

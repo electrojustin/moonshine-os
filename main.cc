@@ -33,6 +33,7 @@
 #include "proc/pid.h"
 #include "proc/process.h"
 #include "proc/read_write.h"
+#include "proc/seek.h"
 #include "proc/sleep.h"
 #include "proc/stat.h"
 #include "proc/syscall.h"
@@ -124,6 +125,7 @@ void kernel_main(multiboot_info_t* multiboot_info, unsigned int magic) {
 	proc::register_syscall(0x0A, proc::unlink);
 	proc::register_syscall(0x0B, proc::execve);
 	proc::register_syscall(0x0C, proc::chdir);
+	proc::register_syscall(0x13, proc::lseek);
 	proc::register_syscall(0x14, proc::getpid);
 	proc::register_syscall(0x21, proc::access);
 	proc::register_syscall(0x27, proc::mkdir);
@@ -132,6 +134,7 @@ void kernel_main(multiboot_info_t* multiboot_info, unsigned int magic) {
 	proc::register_syscall(0x55, proc::readlink);
 	proc::register_syscall(0x78, proc::clone);
 	proc::register_syscall(0x7A, proc::new_uname);
+	proc::register_syscall(0x8C, proc::llseek);
 	proc::register_syscall(0x92, proc::writev);
 	proc::register_syscall(0xA2, proc::nanosleep);
 	proc::register_syscall(0xC5, proc::fstat64);
@@ -150,8 +153,10 @@ void kernel_main(multiboot_info_t* multiboot_info, unsigned int magic) {
 	drivers::init_pit(0x20, 1000);
 
 	// Load the initial process
-	char* argv[] = {"/init.exe", nullptr};
-	proc::load_elf("/init.exe", 1, argv);
+	char** argv = (char**)lib::std::kmalloc(2 * sizeof(char*));
+	argv[0] = lib::std::make_string_copy("/init.exe");
+	argv[1] = nullptr;
+	proc::load_elf(argv[0], 1, argv);
 
 	// Execute processes
 	proc::execute_processes();

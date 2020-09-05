@@ -18,7 +18,6 @@ using lib::std::memcpy;
 } // namespace
 
 void load_file(struct file* file) {
-	file->needs_flushed = 0;
 	file->offset = 0;
 
 	struct directory_entry file_stats = stat_fat32(file->path);
@@ -26,13 +25,12 @@ void load_file(struct file* file) {
 
 	if (file_stats.name) {
 		kfree(file_stats.name);
+		file->inode = file_stats.inode; 
+	} else {
+		file->inode = 0;
 	}
 
-	if (file_stats.size && !file_stats.is_directory) {
-		file->buffer = (char*)kmalloc(file_stats.size);
-
-		read_fat32(file->path, (uint8_t*)file->buffer, file->size);
-	} else if (file_stats.is_directory) {
+	if (file_stats.is_directory) {
 		struct directory dir = ls_fat32(file->path);
 		
 		file->size = 0;
@@ -74,14 +72,6 @@ void load_file(struct file* file) {
 		kfree(dir.children);
 	} else {
 		file->buffer = nullptr;
-	}
-}
-
-void flush_file(struct file* file) {
-	if (file->needs_flushed) {
-		del_fat32(file->path);
-
-		write_fat32(file->path, 0, (uint8_t*)file->buffer, file->size);
 	}
 }
 

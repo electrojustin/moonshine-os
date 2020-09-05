@@ -9,9 +9,9 @@ struct file {
 	uint32_t file_descriptor;
 	char* path;
 	char* buffer;
+	uint32_t inode; // Actually just cluster num
 	uint32_t size;
 	uint32_t offset;
-	char needs_flushed;
 	struct file* next;
 	struct file* prev;
 };
@@ -34,9 +34,6 @@ constexpr uint32_t ALL_RWX = 0x1FF;
 
 // Loads a file into memory
 void load_file(struct file* file);
-
-// Flushes the file to disk
-void flush_file(struct file* file);
 
 } // namespace filesystem
 

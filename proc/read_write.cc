@@ -20,6 +20,7 @@ using filesystem::del_fat32;
 using filesystem::file;
 using filesystem::read_fat32;
 using filesystem::write_fat32;
+using filesystem::write_new_fat32;
 using io::KEYBOARD_WAIT;
 using io::keyboard_wait;
 using lib::std::kfree;
@@ -29,7 +30,7 @@ using lib::std::memcpy;
 using lib::std::streq;
 using lib::std::strlen;
 
-uint32_t write_internal(struct process* current_process, uint32_t file_descriptor, char* buf, uint32_t size) {
+uint32_t write_internal(struct process* current_process, uint32_t file_descriptor, uint8_t* buf, uint32_t size) {
 	if (file_descriptor < 2) {
 		for (int i = 0; i < size; i++) {
 			lib::std::putc(buf[i]);
@@ -46,28 +47,17 @@ uint32_t write_internal(struct process* current_process, uint32_t file_descripto
 			return -1;
 		}
 
-		// If this is the first time we're writing to the file, erase its previous contents
-		if (!to_write->needs_flushed) {
-			if (to_write->buffer) {
-				kfree(to_write->buffer);
-				to_write->buffer = nullptr;
-			}
-			to_write->size = 0;
-		}
-
-		if (!to_write->size) {
-			to_write->buffer = (char*)kmalloc(size);
+		if (!to_write->inode) {
+			to_write->inode = write_new_fat32(to_write->path, 0, buf, size);
 			to_write->size = size;
-		} else if (to_write->offset + size > to_write->size) {
-			to_write->buffer = (char*)krealloc(to_write->buffer, to_write->offset + size);
-			to_write->size = to_write->offset + size;
+			to_write->offset = size;
+		} else {
+			size_t new_size = write_fat32(to_write->path, to_write->offset, buf, size);
+			if (new_size > 1) {
+				to_write->size = new_size;
+			}
+			to_write->offset += size;
 		}
-
-		memcpy(buf, to_write->buffer + to_write->offset, size);
-
-		to_write->offset += size;
-
-		to_write->needs_flushed = 1;
 
 		return size;
 	}
@@ -104,9 +94,21 @@ uint32_t read(uint32_t file_descriptor, uint32_t dest, uint32_t size, uint32_t r
 			return -1;
 		}
 
-		uint32_t read_size = size < (to_read->size - to_read->offset) ? size : (to_read->size - to_read->offset);
-		if (read_size) {
-			physical_to_virtual_memcpy(page_dir, to_read->buffer, (char*)dest, read_size);
+		uint32_t read_size = 0;
+		if (to_read->buffer) {
+			read_size = size < (to_read->size - to_read->offset) ? size : (to_read->size - to_read->offset);
+			if (read_size) {
+				physical_to_virtual_memcpy(page_dir, to_read->buffer, (char*)dest, read_size);
+			}
+		} else if (to_read->inode){
+			uint8_t* temp_buf = (uint8_t*)kmalloc(size);
+			read_size = read_fat32(to_read->inode, to_read->offset, temp_buf, size);
+			if (read_size) {
+				physical_to_virtual_memcpy(page_dir, (char*)temp_buf, (char*)dest, read_size);
+			}
+			kfree(temp_buf);
+		} else {
+			return -1;
 		}
 
 		to_read->offset += read_size;
@@ -135,8 +137,8 @@ uint32_t readlink(uint32_t path_addr, uint32_t buf_addr, uint32_t len, uint32_t 
 uint32_t write(uint32_t file_descriptor, uint32_t src, uint32_t size, uint32_t reserved1, uint32_t reserved2) {
 	struct process* current_process = get_currently_executing_process();
 	uint32_t* page_dir = current_process->page_dir;
-	char* buf = (char*)kmalloc(size);
-	virtual_to_physical_memcpy(page_dir, (char*)src, buf, size);
+	uint8_t* buf = (uint8_t*)kmalloc(size);
+	virtual_to_physical_memcpy(page_dir, (char*)src, (char*)buf, size);
 
 	uint32_t ret = write_internal(current_process, file_descriptor, buf, size);
 	kfree(buf);
@@ -154,10 +156,10 @@ uint32_t writev(uint32_t file_descriptor, uint32_t io_vector_addr, uint32_t vect
 		total_len += vector[i].len;
 	}
 
-	char* buf = (char*)kmalloc(total_len);
-	char* current_buf = buf;
+	uint8_t* buf = (uint8_t*)kmalloc(total_len);
+	uint8_t* current_buf = buf;
 	for (int i = 0; i < vector_len; i++) {
-		virtual_to_physical_memcpy(page_dir, vector[i].buf, current_buf, vector[i].len);
+		virtual_to_physical_memcpy(page_dir, vector[i].buf, (char*)current_buf, vector[i].len);
 		current_buf += vector[i].len;
 	}
 

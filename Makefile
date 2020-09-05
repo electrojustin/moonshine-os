@@ -40,6 +40,7 @@ moonshine.bin: boot.o \
 	       proc/pid.o \
 	       proc/process.o \
 	       proc/read_write.o \
+	       proc/seek.o \
 	       proc/sleep.o \
 	       proc/stat.o \
 	       proc/syscall.o \
@@ -86,6 +87,7 @@ moonshine.bin: boot.o \
 		      proc/pid.o \
 		      proc/process.o \
 		      proc/read_write.o \
+		      proc/seek.o \
 		      proc/sleep.o \
 		      proc/stat.o \
 		      proc/syscall.o \
@@ -350,6 +352,11 @@ proc/read_write.o: proc/read_write.cc \
 		   lib/std/string.h \
 		   proc/process.h 
 	gcc $(CFLAGS) -c proc/read_write.cc -o proc/read_write.o
+proc/seek.o: proc/seek.cc \
+	     proc/seek.h \
+	     filesystem/file.h \
+	     proc/process.h
+	gcc $(CFLAGS) -c proc/seek.cc -o proc/seek.o
 proc/sleep.o: proc/sleep.cc \
 	      proc/sleep.h \
 	      arch/i386/memory/paging.h \
@@ -431,6 +438,7 @@ clean:
 	proc/pid.o \
 	proc/process.o \
 	proc/read_write.o \
+	proc/seek.o \
 	proc/sleep.o \
 	proc/stat.o \
 	proc/syscall.o \

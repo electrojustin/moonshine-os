@@ -62,7 +62,9 @@ void cleanup_process(struct process* to_cleanup) {
 	kfree(to_cleanup->page_dir);
 
 	for (int i = 0; i < to_cleanup->argc; i++) {
-		kfree(to_cleanup->argv[i]);
+		if (to_cleanup->argv[i]) {
+			kfree(to_cleanup->argv[i]);
+		}
 	}
 	kfree(to_cleanup->argv);
 
