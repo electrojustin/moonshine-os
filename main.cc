@@ -139,6 +139,7 @@ void kernel_main(multiboot_info_t* multiboot_info, unsigned int magic) {
 	proc::register_syscall(0x7A, proc::new_uname);
 	proc::register_syscall(0x7D, proc::mprotect);
 	proc::register_syscall(0x8C, proc::llseek);
+	proc::register_syscall(0x90, proc::msync);
 	proc::register_syscall(0x92, proc::writev);
 	proc::register_syscall(0xA2, proc::nanosleep);
 	proc::register_syscall(0xC0, proc::mmap);
