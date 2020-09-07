@@ -64,20 +64,6 @@ __attribute__((interrupt)) void general_protection_fault(struct interrupt_frame*
 	handle_fault(frame, (char*)"General protection fault!");
 }
 
-constexpr uint32_t USER_PAGE_FAULT = 0x4;
-
-__attribute__((interrupt)) void page_fault(struct interrupt_frame* frame, uint32_t error_code) {
-	asm volatile("cli");
-	if (error_code & USER_PAGE_FAULT) {
-		print_error((char*)"Segmentation Fault");
-		kill_current_process();
-	} else {
-		char buf[100];
-		sprintnk(buf, 100, "Page fault! Error code: %x", error_code);
-		panic(buf);
-	}
-}
-
 __attribute__((interrupt)) void simd_exception(struct interrupt_frame* frame) {
 	handle_fault(frame, (char*)"SIMD exception!");
 }

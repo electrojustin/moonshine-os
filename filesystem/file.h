@@ -1,6 +1,7 @@
 #ifndef FILESYSTEM_FILE_H
 #define FILESYSTEM_FILE_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace filesystem {
@@ -12,6 +13,8 @@ struct file {
 	uint32_t inode; // Actually just cluster num
 	uint32_t size;
 	uint32_t offset;
+	void* mapping;
+	size_t mapping_len;
 	struct file* next;
 	struct file* prev;
 };

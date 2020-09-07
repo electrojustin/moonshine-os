@@ -29,6 +29,7 @@
 #include "proc/exit.h"
 #include "proc/fork.h"
 #include "proc/ioctl.h"
+#include "proc/mmap.h"
 #include "proc/open.h"
 #include "proc/pid.h"
 #include "proc/process.h"
@@ -132,11 +133,15 @@ void kernel_main(multiboot_info_t* multiboot_info, unsigned int magic) {
 	proc::register_syscall(0x2D, proc::brk);
 	proc::register_syscall(0x36, proc::ioctl);
 	proc::register_syscall(0x55, proc::readlink);
+	proc::register_syscall(0x5A, proc::mmap);
+	proc::register_syscall(0x5B, proc::munmap);
 	proc::register_syscall(0x78, proc::clone);
 	proc::register_syscall(0x7A, proc::new_uname);
+	proc::register_syscall(0x7D, proc::mprotect);
 	proc::register_syscall(0x8C, proc::llseek);
 	proc::register_syscall(0x92, proc::writev);
 	proc::register_syscall(0xA2, proc::nanosleep);
+	proc::register_syscall(0xC0, proc::mmap);
 	proc::register_syscall(0xC5, proc::fstat64);
 	proc::register_syscall(0xC7, proc::getuid);
 	proc::register_syscall(0xC8, proc::getgid);
@@ -145,6 +150,7 @@ void kernel_main(multiboot_info_t* multiboot_info, unsigned int magic) {
 	proc::register_syscall(0xDC, proc::getdents);
 	proc::register_syscall(0xF3, proc::set_thread_area);
 	proc::register_syscall(0xF4, proc::get_thread_area);
+	proc::register_syscall(0xFC, proc::exit);
 	proc::register_syscall(0x127, proc::openat);
 	proc::register_syscall(0x180, proc::arch_prctl);
 	proc::register_syscall(0x197, proc::clock_nanosleep);

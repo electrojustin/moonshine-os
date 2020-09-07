@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "filesystem/file.h"
 #include "proc/process.h"
 
 // These are defined in boot.s, near the initial stack.
@@ -16,6 +17,7 @@ namespace memory {
 namespace {
 
 using proc::process;
+using filesystem::file;
 
 } // namespace
 
@@ -30,6 +32,8 @@ enum permission {
 
 // Map a range of physical addresses to a range of virtual addresses
 void map_memory_range(uint32_t* page_directory, uint32_t* page_table, void* physical_address, void* virtual_address, uint32_t size, enum permission page_permissions);
+
+void unmap_memory_range(uint32_t* page_directory, void* virtual_addr, size_t len);
 
 // A variant of the above function that assumes the caller has passed in pointers to the correct page table entries.
 void map_memory_range_offset(uint32_t* page_directory, uint32_t* page_table_entry, void* physical_address, void* virtual_address, uint32_t size, enum permission page_permissions);
@@ -57,13 +61,17 @@ static void inline enable_paging(void) {
 		: "ecx");
 }
 
-void* virtual_to_physical(uint32_t* page_dir, void* virtual_addr);
+void* virtual_to_physical(uint32_t* page_dir, void* virtual_addr, uint16_t* flags=nullptr);
 
 void physical_to_virtual_memcpy(uint32_t* page_dir, char* src, char* dest, size_t size);
 
 void virtual_to_physical_memcpy(uint32_t* page_dir, char* src, char* dest, size_t size);
 
 char* make_virtual_string_copy(uint32_t* page_dir, char* virtual_string);
+
+char swap_in_page(struct process* proc, void* virtual_addr);
+
+void flush_pages(uint32_t* page_dir, struct file* backing_file);
 
 } // namespace memory
 } // namespace arch

@@ -1,3 +1,4 @@
+#include "arch/i386/memory/paging.h"
 #include "proc/close.h"
 #include "proc/process.h"
 #include "lib/std/memory.h"
@@ -7,12 +8,17 @@ namespace proc {
 
 namespace {
 
+using arch::memory::flush_pages;
 using filesystem::file;
 using lib::std::kfree;
 
 } // namespace
 
 void close_file(struct process* current_process, struct file* to_close) {
+	if (to_close->mapping) {
+		flush_pages(current_process->page_dir, to_close);
+	}
+
 	kfree(to_close->path);
 	if (to_close->buffer) {
 		kfree(to_close->buffer);

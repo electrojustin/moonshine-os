@@ -37,6 +37,7 @@ moonshine.bin: boot.o \
 	       proc/fork.o \
 	       proc/ioctl.o \
 	       proc/open.o \
+	       proc/mmap.o \
 	       proc/pid.o \
 	       proc/process.o \
 	       proc/read_write.o \
@@ -84,6 +85,7 @@ moonshine.bin: boot.o \
 		      proc/fork.o \
 		      proc/ioctl.o \
 		      proc/open.o \
+		      proc/mmap.o \
 		      proc/pid.o \
 		      proc/process.o \
 		      proc/read_write.o \
@@ -125,6 +127,7 @@ main.o: main.cc \
 	     proc/exit.h \
 	     proc/fork.h \
 	     proc/ioctl.h \
+	     proc/mmap.h \
 	     proc/open.h \
 	     proc/pid.h \
 	     proc/process.h \
@@ -159,9 +162,12 @@ arch/interrupts/interrupts.o: arch/i386/interrupts/interrupts.cc \
 			      arch/interrupts/interrupts.h \
 			      arch/i386/interrupts/error_interrupts.h \
 			      arch/i386/interrupts/idt.h \
+			      arch/i386/interrupts/page_fault.h \
 			      arch/i386/interrupts/pic.h \
 			      arch/i386/memory/gdt.h \
-			      lib/std/stdio.h
+			      arch/i386/memory/paging.h \
+			      lib/std/stdio.h \
+			      proc/process.h
 	gcc $(CFLAGS) -mgeneral-regs-only -c arch/i386/interrupts/interrupts.cc -o arch/interrupts/interrupts.o
 arch/interrupts/pic.o: arch/i386/interrupts/pic.cc \
 		       arch/i386/interrupts/pic.h \
@@ -252,10 +258,12 @@ lib/std/memory.o: lib/std/memory.cc \
 	gcc $(CFLAGS) -c lib/std/memory.cc -o lib/std/memory.o
 lib/std/stdio.o: lib/std/stdio.cc \
 		 lib/std/stdio.h \
+		 arch/i386/memory/paging.h \
 		 io/vga.h \
 		 io/keyboard.h \
 		 lib/std/memory.h \
-		 lib/std/string.h
+		 lib/std/string.h \
+		 proc/process.h
 	gcc $(CFLAGS) -c lib/std/stdio.cc -o lib/std/stdio.o
 lib/std/string.o: lib/std/string.cc \
 		  lib/std/string.h \
@@ -316,6 +324,13 @@ proc/fork.o: proc/fork.cc \
 proc/ioctl.o: proc/ioctl.cc \
 	      proc/ioctl.h
 	gcc $(CFLAGS) -c proc/ioctl.cc -o proc/ioctl.o
+proc/mmap.o: proc/mmap.cc \
+	     proc/mmap.h \
+	     arch/i386/memory/paging.h \
+	     filesystem/file.h \
+	     lib/std/memory.h \
+	     proc/process.h
+	gcc $(CFLAGS) -c proc/mmap.cc -o proc/mmap.o
 proc/open.o: proc/open.cc \
 	     proc/open.h \
 	     arch/i386/memory/paging.h \
@@ -434,6 +449,7 @@ clean:
 	proc/exit.o \
 	proc/fork.o \
 	proc/ioctl.o \
+	proc/mmap.o \
 	proc/open.o \
 	proc/pid.o \
 	proc/process.o \

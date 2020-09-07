@@ -20,8 +20,8 @@ typedef uint32_t(*syscall_t)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
 
 syscall_t* syscalls;
 
-uint32_t nop_syscall(uint32_t ebx, uint32_t ecx, uint32_t edx, uint32_t esi, uint32_t edi) {
-	return 0;
+uint32_t default_syscall(uint32_t ebx, uint32_t ecx, uint32_t edx, uint32_t esi, uint32_t edi) {
+	lib::std::panic("Invalid system call!");
 }
 
 using arch::cpu::is_sse_enabled;
@@ -81,7 +81,7 @@ void initialize_syscalls(uint32_t max_syscall_number) {
 	syscalls = (syscall_t*)lib::std::kmalloc(num_syscalls*sizeof(syscall_t));
 
 	for (int i = 0; i < num_syscalls; i++) {
-		syscalls[i] = nop_syscall;
+		syscalls[i] = default_syscall;
 	}
 
 	arch::interrupts::register_interrupt_handler(INTERRUPT_NUMBER, arch::interrupts::INTERRUPT_GATE, 3, (void*)syscall_interrupt);

@@ -101,7 +101,7 @@ void execute_new_process(void) {
 	// Set up the temporary thread local storage (TLS)
 	set_tls(process_list->tls_segments[process_list->tls_segment_index]);
 
-	// Set the TSS segment to point to this process's kernel stackk
+	// Set the TSS segment to point to this process's kernel stack
 	main_tss.esp0 = process_list->kernel_stack_top;
 	flush_tss();
 
@@ -246,6 +246,7 @@ char spawn_new_process(char* path, int argc, char** argv, struct process_memory_
 	stack_segment->source = nullptr;
 	stack_segment->flags = READABLE_MEMORY || WRITEABLE_MEMORY;
 	new_proc->esp = ((uint32_t)stack_segment->virtual_address + stack_segment->segment_size) & 0xFFFFFFFC; // Stacks are generally 4 byte aligned
+	new_proc->lower_brk = stack_bottom;
 
 	// Add a kernel stack segment
 	struct process_memory_segment* kernel_stack_segment = new_proc->segments+(new_proc->num_segments-1);

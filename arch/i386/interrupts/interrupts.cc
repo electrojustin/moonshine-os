@@ -3,6 +3,7 @@
 
 #include "arch/i386/interrupts/error_interrupts.h"
 #include "arch/i386/interrupts/idt.h"
+#include "arch/i386/interrupts/page_fault.h"
 #include "arch/i386/interrupts/pic.h"
 #include "arch/i386/memory/gdt.h"
 #include "arch/interrupts/interrupts.h"

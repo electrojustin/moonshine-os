@@ -15,6 +15,7 @@ namespace proc {
 namespace {
 
 using arch::cpu::is_sse_enabled;
+using arch::memory::flush_pages;
 using arch::memory::map_memory_segment;
 using arch::memory::PAGE_SIZE;
 using arch::memory::permission;
@@ -59,11 +60,7 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3, uint32
 	new_proc->segments = (struct process_memory_segment*)kmalloc(new_proc->num_segments*sizeof(struct process_memory_segment));
 	for (int i = 0; i < new_proc->num_segments; i++) {
 		new_proc->segments[i].flags = parent_proc->segments[i].flags;
-		if (parent_proc->segments[i].virtual_address) {
-			new_proc->segments[i].virtual_address = parent_proc->segments[i].virtual_address;
-		} else {
-			new_proc->segments[i].virtual_address = nullptr;
-		}
+		new_proc->segments[i].virtual_address = parent_proc->segments[i].virtual_address;
 		new_proc->segments[i].segment_size = parent_proc->segments[i].segment_size;
 		new_proc->segments[i].alloc_size = parent_proc->segments[i].alloc_size;
 
@@ -103,8 +100,10 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3, uint32
 	struct file* current_file = parent_proc->open_files;
 	new_proc->open_files = nullptr;
 	while (current_file) {
+		flush_pages(parent_proc->page_dir, current_file);
 		struct file* new_file = (struct file*)kmalloc(sizeof(struct file));
 		memcpy((char*)current_file, (char*)new_file, sizeof(struct file));
+		new_file->path = make_string_copy(new_file->path);
 		insert_file(new_proc, new_file);
 		current_file = current_file->next;
 	}

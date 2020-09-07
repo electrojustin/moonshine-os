@@ -67,6 +67,8 @@ struct process {
 	uint32_t actual_brk;
 	uint32_t brk;
 
+	uint32_t lower_brk;
+
 	int argc;
 	char** argv;
 
