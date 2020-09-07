@@ -214,12 +214,10 @@ void flush_pages(uint32_t* page_dir, struct file* backing_file) {
 
 		uint32_t* page_table_entry = get_page_table_entry(page_dir, current_addr);
 
-		lib::std::printk("here2\n");
 		if (flags & DIRTY) {
 			// Flush dirty pages to disk
 			uint32_t offset = (uint32_t)current_addr - (uint32_t)backing_file->mapping;
 			size_t write_len = backing_file->mapping_len - offset < PAGE_SIZE ? backing_file->mapping_len - offset : PAGE_SIZE;
-			lib::std::printk("here3 %d %d %c\n", write_len, offset, *((char*)actual_addr+3));
 			write_fat32(backing_file->path, offset, (uint8_t*)actual_addr, write_len);
 			*page_table_entry ^= DIRTY;
 		}
