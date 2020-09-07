@@ -1,6 +1,8 @@
 #ifndef PROC_SEEK_H
 #define PROC_SEEK_H
 
+#include <stdint.h>
+
 namespace proc {
 
 uint32_t lseek(uint32_t file_descriptor, uint32_t offset, uint32_t whence,

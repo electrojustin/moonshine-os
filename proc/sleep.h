@@ -2,6 +2,7 @@
 #define PROC_SLEEP_H
 
 #include "lib/std/time.h"
+#include "proc/process.h"
 
 namespace proc {
 
