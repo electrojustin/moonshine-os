@@ -4,13 +4,9 @@
 namespace arch {
 namespace interrupts {
 
-void enable_interrupts(void) {
-	asm volatile("sti");
-}
+void enable_interrupts(void) { asm volatile("sti"); }
 
-void disable_interrupts(void) {
-	asm volatile("cli");
-}
+void disable_interrupts(void) { asm volatile("cli"); }
 
 } // namespace interrupts
 } // namespace arch

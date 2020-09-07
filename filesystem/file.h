@@ -7,23 +7,23 @@
 namespace filesystem {
 
 struct file {
-	uint32_t file_descriptor;
-	char* path;
-	char* buffer;
-	uint32_t inode; // Actually just cluster num
-	uint32_t size;
-	uint32_t offset;
-	void* mapping;
-	size_t mapping_len;
-	struct file* next;
-	struct file* prev;
+  uint32_t file_descriptor;
+  char *path;
+  char *buffer;
+  uint32_t inode; // Actually just cluster num
+  uint32_t size;
+  uint32_t offset;
+  void *mapping;
+  size_t mapping_len;
+  struct file *next;
+  struct file *prev;
 };
 
 struct __attribute__((packed)) dirent_header {
-	uint64_t inode_number = 1; // Unused
-	uint64_t next_offset;
-	uint16_t size;
-	uint8_t type;
+  uint64_t inode_number = 1; // Unused
+  uint64_t next_offset;
+  uint16_t size;
+  uint8_t type;
 };
 
 constexpr uint8_t SYMLINK = 0xA;
@@ -36,7 +36,7 @@ constexpr uint8_t FIFO = 0x1;
 constexpr uint32_t ALL_RWX = 0x1FF;
 
 // Loads a file into memory
-void load_file(struct file* file);
+void load_file(struct file *file);
 
 } // namespace filesystem
 

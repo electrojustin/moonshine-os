@@ -7,13 +7,13 @@ namespace lib {
 namespace std {
 
 struct time {
-	uint32_t seconds;
-	uint32_t nanoseconds;
+  uint32_t seconds;
+  uint32_t nanoseconds;
 };
 
 extern struct time system_time;
 
-void tick(struct time& tick_len);
+void tick(struct time &tick_len);
 
 } // namespace std
 } // namespace lib

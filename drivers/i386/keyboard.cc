@@ -1,9 +1,9 @@
 #include <stdint.h>
 
-#include "drivers/i386/keyboard.h"
-#include "arch/interrupts/interrupts.h"
 #include "arch/i386/interrupts/idt.h"
 #include "arch/i386/interrupts/pic.h"
+#include "arch/interrupts/interrupts.h"
+#include "drivers/i386/keyboard.h"
 #include "io/i386/io.h"
 #include "io/keyboard.h"
 
@@ -29,39 +29,43 @@ constexpr uint8_t KEYBOARD_ENABLE_INTERRUPT_ONE = 0x1;
 constexpr uint8_t KEYBOARD_ENABLE_INTERRUPT_TWO = 0x2;
 constexpr uint16_t KEYBOARD_INTERRUPT_MASK = ~0x2;
 
-__attribute__((interrupt)) void keyboard_interrupt(struct interrupt_frame* frame) {
-	uint8_t keycode = in(KEYBOARD_DATA_PORT);
-	if (keycode > 0x58) {
-		io::key_release(keycode - 0x80);
-	} else {
-		io::key_press(keycode);
-	}
-	arch::interrupts::end_interrupt(keyboard_irq_num);
+__attribute__((interrupt)) void
+keyboard_interrupt(struct interrupt_frame *frame) {
+  uint8_t keycode = in(KEYBOARD_DATA_PORT);
+  if (keycode > 0x58) {
+    io::key_release(keycode - 0x80);
+  } else {
+    io::key_press(keycode);
+  }
+  arch::interrupts::end_interrupt(keyboard_irq_num);
 }
 
 } // namespace
 
 void init_keyboard(uint8_t irq_num) {
-	keyboard_irq_num = irq_num;
+  keyboard_irq_num = irq_num;
 
-	arch::interrupts::register_interrupt_handler(keyboard_irq_num, arch::interrupts::INTERRUPT_GATE, 0, (void*)keyboard_interrupt);
+  arch::interrupts::register_interrupt_handler(keyboard_irq_num,
+                                               arch::interrupts::INTERRUPT_GATE,
+                                               0, (void *)keyboard_interrupt);
 
-	// Disable keyboard
-	out(KEYBOARD_COMMAND_PORT, KEYBOARD_DISABLE_ONE);
-	out(KEYBOARD_COMMAND_PORT, KEYBOARD_DISABLE_TWO);
+  // Disable keyboard
+  out(KEYBOARD_COMMAND_PORT, KEYBOARD_DISABLE_ONE);
+  out(KEYBOARD_COMMAND_PORT, KEYBOARD_DISABLE_TWO);
 
-	// Flush keyboard buffer
-	in(KEYBOARD_DATA_PORT);
+  // Flush keyboard buffer
+  in(KEYBOARD_DATA_PORT);
 
-	// Enable keyboard
-	out(KEYBOARD_COMMAND_PORT, KEYBOARD_ENABLE_ONE);
-	out(KEYBOARD_COMMAND_PORT, KEYBOARD_ENABLE_TWO);
+  // Enable keyboard
+  out(KEYBOARD_COMMAND_PORT, KEYBOARD_ENABLE_ONE);
+  out(KEYBOARD_COMMAND_PORT, KEYBOARD_ENABLE_TWO);
 
-	// Enable keyboard controller interrupts
-	out(KEYBOARD_DATA_PORT, KEYBOARD_ENABLE_INTERRUPT_ONE | KEYBOARD_ENABLE_INTERRUPT_TWO);
+  // Enable keyboard controller interrupts
+  out(KEYBOARD_DATA_PORT,
+      KEYBOARD_ENABLE_INTERRUPT_ONE | KEYBOARD_ENABLE_INTERRUPT_TWO);
 
-	// Unmask keyboard IRQ
-	pic_set_mask(pic_get_mask() & KEYBOARD_INTERRUPT_MASK);
+  // Unmask keyboard IRQ
+  pic_set_mask(pic_get_mask() & KEYBOARD_INTERRUPT_MASK);
 }
 
 } // namespace drivers

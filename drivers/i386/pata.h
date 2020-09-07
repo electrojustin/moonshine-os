@@ -29,49 +29,55 @@ constexpr uint8_t READ_COMMAND = 0x20;
 constexpr uint8_t WRITE_COMMAND = 0x30;
 
 struct ide_device {
-	// Includes:
-	// Data, Error, Features
-	// Sector count, Sector number, Cylinder low
-	// Cylinder high, Drive/Head, Status, Command
-	uint16_t io_base_port;
-	// Includes:
-	// Alternative status, Device control, Device select
-	uint16_t control_base_port;
-	char device_select; // 1 bit value
+  // Includes:
+  // Data, Error, Features
+  // Sector count, Sector number, Cylinder low
+  // Cylinder high, Drive/Head, Status, Command
+  uint16_t io_base_port;
+  // Includes:
+  // Alternative status, Device control, Device select
+  uint16_t control_base_port;
+  char device_select; // 1 bit value
 
-	// Basic infromation
-	char is_connected;
-	char model[41];
+  // Basic infromation
+  char is_connected;
+  char model[41];
 
-	// Drive geometry
-	uint16_t num_cylinders;
-	uint16_t num_heads;
-	uint16_t sectors_per_track;
+  // Drive geometry
+  uint16_t num_cylinders;
+  uint16_t num_heads;
+  uint16_t sectors_per_track;
 };
 
 extern struct ide_device devices[4];
 
-uint8_t read_io_register(const struct ide_device& device, uint8_t reg);
+uint8_t read_io_register(const struct ide_device &device, uint8_t reg);
 
-void read_io_word_block(const struct ide_device& device, uint8_t reg, uint16_t* buffer, size_t size);
+void read_io_word_block(const struct ide_device &device, uint8_t reg,
+                        uint16_t *buffer, size_t size);
 
-uint8_t read_control_register(const struct ide_device& device, uint8_t reg);
+uint8_t read_control_register(const struct ide_device &device, uint8_t reg);
 
-void write_io_register(const struct ide_device& device, uint8_t reg, uint8_t value);
+void write_io_register(const struct ide_device &device, uint8_t reg,
+                       uint8_t value);
 
-void write_io_word_block(const struct ide_device& device, uint8_t reg, uint16_t* buffer, size_t size);
+void write_io_word_block(const struct ide_device &device, uint8_t reg,
+                         uint16_t *buffer, size_t size);
 
-void write_control_register(const struct ide_device& device, uint8_t reg, uint8_t value);
+void write_control_register(const struct ide_device &device, uint8_t reg,
+                            uint8_t value);
 
-void set_ide_interrupt_enable(const struct ide_device& device, char is_enabled);
+void set_ide_interrupt_enable(const struct ide_device &device, char is_enabled);
 
-void send_command(const struct ide_device& device, uint8_t command);
+void send_command(const struct ide_device &device, uint8_t command);
 
-void identify_drive(struct ide_device* device);
+void identify_drive(struct ide_device *device);
 
-void read_sectors(const struct ide_device& device, uint8_t* buffer, uint32_t num_sectors, uint32_t lba);
+void read_sectors(const struct ide_device &device, uint8_t *buffer,
+                  uint32_t num_sectors, uint32_t lba);
 
-void write_sectors(const struct ide_device& device, uint8_t* buffer, uint32_t num_sectors, uint32_t lba);
+void write_sectors(const struct ide_device &device, uint8_t *buffer,
+                   uint32_t num_sectors, uint32_t lba);
 
 } // namespace drivers
 

@@ -9,8 +9,8 @@ namespace cpu {
 constexpr uint32_t APIC_BASE_MSR = 0x1B;
 
 struct cpu_msr {
-	uint32_t low;
-	uint32_t high;
+  uint32_t low;
+  uint32_t high;
 };
 
 struct cpu_msr get_msr(uint32_t msr);

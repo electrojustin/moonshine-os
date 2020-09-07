@@ -14,14 +14,14 @@ using drivers::ide_device;
 } // namespace
 
 struct chs {
-	uint16_t cylinder;
-	uint8_t head;
-	uint8_t sector;
+  uint16_t cylinder;
+  uint8_t head;
+  uint8_t sector;
 };
 
-uint32_t chs_to_lba(struct ide_device& device, struct chs& coords);
+uint32_t chs_to_lba(struct ide_device &device, struct chs &coords);
 
-struct chs lba_to_chs(struct ide_device& device, uint32_t lba);
+struct chs lba_to_chs(struct ide_device &device, uint32_t lba);
 
 } // namespace filesystem
 

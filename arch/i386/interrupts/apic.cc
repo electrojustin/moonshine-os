@@ -11,9 +11,9 @@ using arch::cpu::cpu_msr;
 } // namespace
 
 void disable_apic(void) {
-	struct cpu_msr value = arch::cpu::get_msr(arch::cpu::APIC_BASE_MSR);
-	value.low = value.low & 0xFFFFF7FF;
-	arch::cpu::set_msr(arch::cpu::APIC_BASE_MSR, value);
+  struct cpu_msr value = arch::cpu::get_msr(arch::cpu::APIC_BASE_MSR);
+  value.low = value.low & 0xFFFFF7FF;
+  arch::cpu::set_msr(arch::cpu::APIC_BASE_MSR, value);
 }
 
 } // namespace interrupts
