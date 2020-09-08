@@ -61,7 +61,6 @@ void restore_processor_state(uint32_t esp, uint32_t kernel_stack_top) {
                "mov %%ecx, %%esp\n"
                "sse_disabled:\n"
                "popal\n"
-               "pop %%ebp\n"
                "sti\n"
                "iret"
                :

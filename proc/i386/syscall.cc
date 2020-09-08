@@ -50,11 +50,11 @@ extern "C" void syscall_dispatch(char is_userspace) {
   // details.
   edi = esp[0];
   esi = esp[1];
+  ebp = esp[2];
   ebx = esp[4];
   edx = esp[5];
   ecx = esp[6];
   eax = esp[7];
-  ebp = esp[8];
 
   if (eax >= num_syscalls) {
     lib::std::panic("Invalid system call!");

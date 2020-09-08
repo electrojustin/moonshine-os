@@ -26,7 +26,6 @@ void restore_processor_state(uint32_t esp, uint32_t kernel_stack_top);
 #define SAVE_PROCESSOR_STATE(entry_name, exit_name)                            \
   asm("" #entry_name ":\n"                                                     \
       "cli\n"                                                                  \
-      "push %ebp\n"                                                            \
       "pushal\n"                                                               \
       "mov is_sse_enabled, %eax\n"                                             \
       "test %eax, %eax\n"                                                      \
