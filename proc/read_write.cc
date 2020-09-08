@@ -158,7 +158,8 @@ uint32_t write(uint32_t file_descriptor, uint32_t src, uint32_t size,
 }
 
 uint32_t writev(uint32_t file_descriptor, uint32_t io_vector_addr,
-                uint32_t vector_len, uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
+                uint32_t vector_len, uint32_t reserved1, uint32_t reserved2,
+                uint32_t reserved3) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
   struct io_vector *vector =

@@ -40,7 +40,8 @@ uint32_t lseek(uint32_t file_descriptor, uint32_t offset, uint32_t whence,
 }
 
 uint32_t llseek(uint32_t file_descriptor, uint32_t offset_high,
-                uint32_t offset_low, uint32_t result_addr, uint32_t whence, uint32_t reserved1) {
+                uint32_t offset_low, uint32_t result_addr, uint32_t whence,
+                uint32_t reserved1) {
   // 64 bit offsets are unsupported
   return lseek(file_descriptor, offset_low, whence, 0, 0, 0);
 }

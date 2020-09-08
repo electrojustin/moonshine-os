@@ -44,7 +44,8 @@ uint32_t nanosleep(uint32_t req_addr, uint32_t rem_addr, uint32_t reserved1,
 }
 
 uint32_t clock_nanosleep(uint32_t clock_id, uint32_t flags, uint32_t req_addr,
-                         uint32_t rem_addr, uint32_t reserved1, uint32_t reserved2) {
+                         uint32_t rem_addr, uint32_t reserved1,
+                         uint32_t reserved2) {
   return nanosleep(req_addr, rem_addr, 0, 0, 0, 0);
 }
 

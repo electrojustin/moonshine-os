@@ -16,7 +16,8 @@ namespace {
 
 uint32_t num_syscalls;
 
-typedef uint32_t (*syscall_t)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
+typedef uint32_t (*syscall_t)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
+                              uint32_t);
 
 syscall_t *syscalls;
 
