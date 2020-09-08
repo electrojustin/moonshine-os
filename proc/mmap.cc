@@ -20,7 +20,7 @@ using lib::std::krealloc;
 } // namespace
 
 uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
-              uint32_t file_descriptor) {
+              uint32_t file_descriptor, uint32_t offset) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
 
@@ -71,8 +71,8 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
 }
 
 uint32_t munmap(uint32_t req_addr, uint32_t len, uint32_t reserved1,
-                uint32_t reserved2, uint32_t reserved3) {
-  if (!msync(req_addr, len, 0, 0, 0)) {
+                uint32_t reserved2, uint32_t reserved3, uint32_t reserved4) {
+  if (!msync(req_addr, len, 0, 0, 0, 0)) {
     struct process *current_process = get_currently_executing_process();
     uint32_t *page_dir = current_process->page_dir;
 
@@ -114,12 +114,12 @@ uint32_t munmap(uint32_t req_addr, uint32_t len, uint32_t reserved1,
 }
 
 uint32_t mprotect(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
-                  uint32_t reserved4, uint32_t reserved5) {
+                  uint32_t reserved4, uint32_t reserved5, uint32_t reserved6) {
   return 0;
 }
 
 uint32_t msync(uint32_t req_addr, uint32_t len, uint32_t flags,
-               uint32_t reserved1, uint32_t reserved2) {
+               uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
 

@@ -16,7 +16,7 @@ using filesystem::file;
 void close_file(struct process *current_process, struct file *to_close);
 
 uint32_t close(uint32_t file_descriptor, uint32_t reserved1, uint32_t reserved2,
-               uint32_t reserved3, uint32_t reserved4);
+               uint32_t reserved3, uint32_t reserved4, uint32_t reserved5);
 
 } // namespace proc
 

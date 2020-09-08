@@ -16,12 +16,12 @@ namespace {
 
 uint32_t num_syscalls;
 
-typedef uint32_t (*syscall_t)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
+typedef uint32_t (*syscall_t)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
 
 syscall_t *syscalls;
 
 uint32_t default_syscall(uint32_t ebx, uint32_t ecx, uint32_t edx, uint32_t esi,
-                         uint32_t edi) {
+                         uint32_t edi, uint32_t ebp) {
   lib::std::panic("Invalid system call!");
 }
 
@@ -36,7 +36,7 @@ constexpr uint8_t INTERRUPT_NUMBER = 0x80;
 extern "C" void syscall_dispatch(char is_userspace) {
   struct process *current_process = proc::get_currently_executing_process();
   uint32_t *esp = (uint32_t *)current_process->esp;
-  uint32_t eax, ebx, ecx, edx, edi, esi;
+  uint32_t eax, ebx, ecx, edx, edi, esi, ebp;
   uint32_t *page_dir = current_process->page_dir;
 
   arch::memory::set_page_directory(page_dir);
@@ -53,13 +53,14 @@ extern "C" void syscall_dispatch(char is_userspace) {
   edx = esp[5];
   ecx = esp[6];
   eax = esp[7];
+  ebp = esp[8];
 
   if (eax >= num_syscalls) {
     lib::std::panic("Invalid system call!");
   } else {
     // Execute the syscall
     arch::memory::set_page_directory(base_page_directory);
-    eax = syscalls[eax](ebx, ecx, edx, esi, edi);
+    eax = syscalls[eax](ebx, ecx, edx, esi, edi, ebp);
 
     // Set the return value
     // Notice how we use page_dir, not current_process->page_dir.
@@ -94,28 +95,12 @@ void initialize_syscalls(uint32_t max_syscall_number) {
 
 void register_syscall(uint32_t number,
                       uint32_t (*syscall)(uint32_t, uint32_t, uint32_t,
-                                          uint32_t, uint32_t)) {
+                                          uint32_t, uint32_t, uint32_t)) {
   if (number >= num_syscalls) {
     lib::std::panic("Attempted to register an invalid system call!");
   }
 
   syscalls[number] = syscall;
-}
-
-uint32_t make_syscall(uint32_t number, uint32_t param1, uint32_t param2,
-                      uint32_t param3) {
-  uint32_t ret;
-  asm volatile("mov %1, %%eax\n"
-               "mov %2, %%edi\n"
-               "mov %3, %%esi\n"
-               "mov %4, %%edx\n"
-               "int $0x80\n"
-               "mov %%eax, %0"
-               : "=r"(ret)
-               : "m"(number), "m"(param1), "m"(param2), "m"(param3)
-               : "eax", "edi", "esi", "edx");
-
-  return ret;
 }
 
 } // namespace proc

@@ -22,7 +22,7 @@ using lib::std::strcat;
 } // namespace
 
 uint32_t execve(uint32_t path_addr, uint32_t argv_addr, uint32_t env_addr,
-                uint32_t reserved1, uint32_t reserved2) {
+                uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
   if (!path_addr || !argv_addr) {
     return -1;
   }

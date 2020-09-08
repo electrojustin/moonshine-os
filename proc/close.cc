@@ -40,7 +40,7 @@ void close_file(struct process *current_process, struct file *to_close) {
 }
 
 uint32_t close(uint32_t file_descriptor, uint32_t reserved1, uint32_t reserved2,
-               uint32_t reserved3, uint32_t reserved4) {
+               uint32_t reserved3, uint32_t reserved4, uint32_t reserved5) {
   struct process *current_process = get_currently_executing_process();
 
   struct file *current_file = current_process->open_files;

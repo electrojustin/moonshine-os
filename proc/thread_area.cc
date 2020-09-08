@@ -22,7 +22,7 @@ constexpr int MAX_TLS_SEGMENTS = 3;
 
 uint32_t set_thread_area(uint32_t tls_segment_addr, uint32_t reserved2,
                          uint32_t reserved3, uint32_t reserved4,
-                         uint32_t reserved5) {
+                         uint32_t reserved5, uint32_t reserved6) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
 
@@ -72,7 +72,7 @@ uint32_t set_thread_area(uint32_t tls_segment_addr, uint32_t reserved2,
 
 uint32_t get_thread_area(uint32_t tls_segment_addr, uint32_t reserved2,
                          uint32_t reserved3, uint32_t reserved4,
-                         uint32_t reserved5) {
+                         uint32_t reserved5, uint32_t reserved6) {
   struct process *current_proc = get_currently_executing_process();
   uint32_t *page_dir = current_proc->page_dir;
   uint32_t index = current_proc->tls_segment_index;

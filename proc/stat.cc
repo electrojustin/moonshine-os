@@ -9,6 +9,8 @@
 
 namespace proc {
 
+namespace {
+
 using arch::memory::physical_to_virtual_memcpy;
 using filesystem::ALL_RWX;
 using filesystem::CHAR_DEVICE;
@@ -21,8 +23,10 @@ using lib::divide;
 using lib::std::kfree;
 using lib::std::kmalloc;
 
+} // namespace
+
 uint32_t fstat64(uint32_t fd, uint32_t stat_addr, uint32_t reserved1,
-                 uint32_t reserved2, uint32_t reserved3) {
+                 uint32_t reserved2, uint32_t reserved3, uint32_t reserved4) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
   struct stat64 *dest_stat = (struct stat64 *)kmalloc(sizeof(struct stat64));

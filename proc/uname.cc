@@ -15,7 +15,7 @@ using lib::std::strlen;
 } // namespace
 
 uint32_t new_uname(uint32_t name_addr, uint32_t reserved1, uint32_t reserved2,
-                   uint32_t reserved3, uint32_t reserved4) {
+                   uint32_t reserved3, uint32_t reserved4, uint32_t reserved5) {
   uint32_t *page_dir = get_currently_executing_process()->page_dir;
   set_page_directory(page_dir);
 

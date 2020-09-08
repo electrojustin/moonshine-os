@@ -34,7 +34,7 @@ void cleanup_dir(int start, struct directory dir) {
 } // namespace
 
 uint32_t chdir(uint32_t path_addr, uint32_t reserved1, uint32_t reserved2,
-               uint32_t reserved3, uint32_t reserved4) {
+               uint32_t reserved3, uint32_t reserved4, uint32_t reserved5) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
   char *path = make_virtual_string_copy(page_dir, (char *)path_addr);
@@ -70,12 +70,12 @@ uint32_t chdir(uint32_t path_addr, uint32_t reserved1, uint32_t reserved2,
 }
 
 uint32_t getdents(uint32_t file_descriptor, uint32_t output, uint32_t count,
-                  uint32_t reserved1, uint32_t reserved2) {
-  return read(file_descriptor, output, count, 0, 0);
+                  uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
+  return read(file_descriptor, output, count, 0, 0, 0);
 }
 
 uint32_t mkdir(uint32_t path_addr, uint32_t mode, uint32_t reserved1,
-               uint32_t reserved2, uint32_t reserved3) {
+               uint32_t reserved2, uint32_t reserved3, uint32_t reserved4) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
   char *path = make_virtual_string_copy(page_dir, (char *)path_addr);

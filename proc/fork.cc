@@ -40,7 +40,7 @@ void insert_file(struct process *proc, struct file *to_insert) {
 } // namespace
 
 uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
-              uint32_t reserved4, uint32_t reserved5) {
+              uint32_t reserved4, uint32_t reserved5, uint32_t reserved6) {
   struct process *parent_proc = get_currently_executing_process();
   struct process *new_proc = (struct process *)kmalloc(sizeof(struct process));
 
@@ -128,8 +128,8 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
   new_proc->prev = parent_proc;
 
   // We don't need to do any gymnastics with virtual and physical memory here
-  // because we always identity page the kernel stack But, we gotta fix any
-  // saved kernel stack pointers
+  // because we always identity page the kernel stack. But, we gotta fix any
+  // saved kernel stack pointers since the addresses will be different.
   uint32_t *esp_actual = (uint32_t *)new_proc->esp;
   if (is_sse_enabled) {
     uint32_t old_esp_actual = *(uint32_t *)parent_proc->esp;
@@ -145,8 +145,8 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
 }
 
 uint32_t clone(uint32_t flags, uint32_t stack_addr, uint32_t parent_tid_addr,
-               uint32_t tls, uint32_t child_tid_addr) {
-  return fork(0, 0, 0, 0, 0);
+               uint32_t tls, uint32_t child_tid_addr, uint32_t reserved1) {
+  return fork(0, 0, 0, 0, 0, 0);
 }
 
 } // namespace proc

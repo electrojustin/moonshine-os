@@ -83,7 +83,7 @@ uint32_t read_from_keyboard(struct process *current_process, char *buf,
 } // namespace
 
 uint32_t read(uint32_t file_descriptor, uint32_t dest, uint32_t size,
-              uint32_t reserved1, uint32_t reserved2) {
+              uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
 
@@ -127,7 +127,7 @@ uint32_t read(uint32_t file_descriptor, uint32_t dest, uint32_t size,
 }
 
 uint32_t readlink(uint32_t path_addr, uint32_t buf_addr, uint32_t len,
-                  uint32_t reserved1, uint32_t reserved2) {
+                  uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
   char *path = make_virtual_string_copy(page_dir, (char *)path_addr);
@@ -146,7 +146,7 @@ uint32_t readlink(uint32_t path_addr, uint32_t buf_addr, uint32_t len,
 }
 
 uint32_t write(uint32_t file_descriptor, uint32_t src, uint32_t size,
-               uint32_t reserved1, uint32_t reserved2) {
+               uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
   uint8_t *buf = (uint8_t *)kmalloc(size);
@@ -158,7 +158,7 @@ uint32_t write(uint32_t file_descriptor, uint32_t src, uint32_t size,
 }
 
 uint32_t writev(uint32_t file_descriptor, uint32_t io_vector_addr,
-                uint32_t vector_len, uint32_t reserved1, uint32_t reserved2) {
+                uint32_t vector_len, uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
   struct io_vector *vector =
@@ -187,7 +187,7 @@ uint32_t writev(uint32_t file_descriptor, uint32_t io_vector_addr,
 }
 
 uint32_t unlink(uint32_t path_addr, uint32_t reserved1, uint32_t reserved2,
-                uint32_t reserved3, uint32_t reserved4) {
+                uint32_t reserved3, uint32_t reserved4, uint32_t reserved5) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
   char *path = make_virtual_string_copy(page_dir, (char *)path_addr);

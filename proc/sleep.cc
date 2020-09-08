@@ -17,7 +17,7 @@ using lib::std::time;
 } // namespace
 
 uint32_t nanosleep(uint32_t req_addr, uint32_t rem_addr, uint32_t reserved1,
-                   uint32_t reserved2, uint32_t reserved3) {
+                   uint32_t reserved2, uint32_t reserved3, uint32_t reserved4) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
   struct time *wait_time = (struct time *)kmalloc(sizeof(struct time));
@@ -44,8 +44,8 @@ uint32_t nanosleep(uint32_t req_addr, uint32_t rem_addr, uint32_t reserved1,
 }
 
 uint32_t clock_nanosleep(uint32_t clock_id, uint32_t flags, uint32_t req_addr,
-                         uint32_t rem_addr, uint32_t reserved1) {
-  return nanosleep(req_addr, rem_addr, 0, 0, 0);
+                         uint32_t rem_addr, uint32_t reserved1, uint32_t reserved2) {
+  return nanosleep(req_addr, rem_addr, 0, 0, 0, 0);
 }
 
 } // namespace proc
