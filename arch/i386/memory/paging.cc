@@ -29,6 +29,8 @@ using proc::process;
 constexpr uint16_t PRESENT = 0x1;
 constexpr uint16_t DIRTY = 0x40;
 
+} // namespace
+
 uint32_t *get_page_table_entry(uint32_t *page_dir, void *virtual_addr) {
   uint32_t page_dir_index = (uint32_t)virtual_addr >> 22;
   uint32_t page_table_index = ((uint32_t)virtual_addr >> 12) & 0x3FF;
@@ -40,8 +42,6 @@ uint32_t *get_page_table_entry(uint32_t *page_dir, void *virtual_addr) {
 
   return page_table + page_table_index;
 }
-
-} // namespace
 
 void map_memory_range(uint32_t *page_directory, uint32_t *page_table,
                       void *physical_address, void *virtual_address,

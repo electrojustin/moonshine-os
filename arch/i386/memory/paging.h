@@ -84,6 +84,8 @@ char swap_in_page(struct process *proc, void *virtual_addr);
 void flush_pages(uint32_t *page_dir, struct file *backing_file,
                  struct file_mapping *mapping);
 
+uint32_t *get_page_table_entry(uint32_t *page_dir, void *virtual_addr);
+
 } // namespace memory
 } // namespace arch
 

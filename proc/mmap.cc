@@ -9,6 +9,7 @@ namespace proc {
 
 namespace {
 using arch::memory::flush_pages;
+using arch::memory::get_page_table_entry;
 using arch::memory::map_memory_segment;
 using arch::memory::PAGE_SIZE;
 using arch::memory::unmap_memory_range;
@@ -69,7 +70,7 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
 
-  if (!req_addr) {
+  if (!req_addr || get_page_table_entry(page_dir, (void *)req_addr)) {
     req_addr = (current_process->lower_brk - len) & (~(PAGE_SIZE - 1));
     current_process->lower_brk = req_addr;
   }
