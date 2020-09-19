@@ -13,10 +13,55 @@ using arch::memory::map_memory_segment;
 using arch::memory::PAGE_SIZE;
 using arch::memory::unmap_memory_range;
 using arch::memory::user_read_write;
+using filesystem::file;
+using filesystem::file_mapping;
 using lib::std::kfree;
 using lib::std::kmalloc;
 using lib::std::kmalloc_aligned;
 using lib::std::krealloc;
+
+uint32_t msync_internal(uint32_t req_addr, uint32_t len, uint32_t flags,
+                        char should_delete_mapping) {
+  struct process *current_process = get_currently_executing_process();
+  uint32_t *page_dir = current_process->page_dir;
+
+  struct file *to_sync = current_process->open_files;
+  struct file_mapping *current_mapping = nullptr;
+  while (to_sync) {
+    current_mapping = to_sync->mappings;
+    while (current_mapping && (uint32_t)current_mapping->mapping != req_addr) {
+      current_mapping = current_mapping->next;
+    }
+
+    if (current_mapping) {
+      break;
+    }
+
+    to_sync = to_sync->next;
+  }
+
+  if (!to_sync) {
+    return -1;
+  }
+
+  flush_pages(page_dir, to_sync, current_mapping);
+
+  if (should_delete_mapping) {
+    if (current_mapping->prev) {
+      current_mapping->prev->next = current_mapping->next;
+    } else {
+      to_sync->mappings = current_mapping->next;
+    }
+
+    if (current_mapping->next) {
+      current_mapping->next->prev = current_mapping->prev;
+    }
+
+    kfree(current_mapping);
+  }
+
+  return 0;
+}
 } // namespace
 
 uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
@@ -63,8 +108,14 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
 
     map_memory_segment(current_process, 0, req_addr, len, user_read_write);
 
-    to_map->mapping = (void *)req_addr;
-    to_map->mapping_len = len;
+    struct file_mapping *new_mapping =
+        (struct file_mapping *)kmalloc(sizeof(struct file_mapping));
+    new_mapping->next = to_map->mappings;
+    new_mapping->prev = nullptr;
+    new_mapping->mapping = (void *)req_addr;
+    new_mapping->mapping_len = len;
+    new_mapping->offset = offset * PAGE_SIZE;
+    to_map->mappings = new_mapping;
 
     return req_addr;
   }
@@ -72,7 +123,7 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
 
 uint32_t munmap(uint32_t req_addr, uint32_t len, uint32_t reserved1,
                 uint32_t reserved2, uint32_t reserved3, uint32_t reserved4) {
-  if (!msync(req_addr, len, 0, 0, 0, 0)) {
+  if (!msync_internal(req_addr, len, 0, true)) {
     struct process *current_process = get_currently_executing_process();
     uint32_t *page_dir = current_process->page_dir;
 
@@ -120,24 +171,7 @@ uint32_t mprotect(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
 
 uint32_t msync(uint32_t req_addr, uint32_t len, uint32_t flags,
                uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
-  struct process *current_process = get_currently_executing_process();
-  uint32_t *page_dir = current_process->page_dir;
-
-  struct file *to_sync = current_process->open_files;
-  while (to_sync && (uint32_t)to_sync->mapping != req_addr) {
-    to_sync = to_sync->next;
-  }
-
-  if (!to_sync) {
-    return -1;
-  }
-
-  flush_pages(page_dir, to_sync);
-
-  to_sync->mapping = nullptr;
-  to_sync->mapping_len = 0;
-
-  return 0;
+  msync_internal(req_addr, len, flags, false);
 }
 
 } // namespace proc

@@ -14,6 +14,7 @@ namespace memory {
 namespace {
 
 using filesystem::file;
+using filesystem::file_mapping;
 using filesystem::read_fat32;
 using filesystem::write_fat32;
 using lib::std::kfree;
@@ -201,10 +202,21 @@ char *make_virtual_string_copy(uint32_t *page_dir, char *virtual_string) {
 
 char swap_in_page(struct process *proc, void *virtual_addr) {
   struct file *current_file = proc->open_files;
+  struct file_mapping *current_mapping = nullptr;
 
-  while (current_file &&
-         !(current_file->mapping <= virtual_addr &&
-           current_file->mapping + current_file->mapping_len > virtual_addr)) {
+  while (current_file) {
+    current_mapping = current_file->mappings;
+    while (current_mapping &&
+           !(current_mapping->mapping <= virtual_addr &&
+             current_mapping->mapping + current_mapping->mapping_len >
+                 virtual_addr)) {
+      current_mapping = current_mapping->next;
+    }
+
+    if (current_mapping) {
+      break;
+    }
+
     current_file = current_file->next;
   }
 
@@ -217,17 +229,19 @@ char swap_in_page(struct process *proc, void *virtual_addr) {
   map_memory_segment(proc, (uint32_t)actual_addr, (uint32_t)virtual_addr,
                      PAGE_SIZE, user_read_write);
 
-  uint32_t offset = (uint32_t)virtual_addr - (uint32_t)current_file->mapping;
-  size_t read_len = current_file->mapping_len - offset < PAGE_SIZE
-                        ? current_file->mapping_len - offset
+  uint32_t offset = (uint32_t)virtual_addr - (uint32_t)current_mapping->mapping;
+  size_t read_len = current_mapping->mapping_len - offset < PAGE_SIZE
+                        ? current_mapping->mapping_len - offset
                         : PAGE_SIZE;
+  offset += current_mapping->offset;
   read_fat32(current_file->inode, offset, (uint8_t *)actual_addr, read_len);
   return 1;
 }
 
-void flush_pages(uint32_t *page_dir, struct file *backing_file) {
-  void *current_addr = backing_file->mapping;
-  while (current_addr < backing_file->mapping + backing_file->mapping_len) {
+void flush_pages(uint32_t *page_dir, struct file *backing_file,
+                 struct file_mapping *mapping) {
+  void *current_addr = mapping->mapping;
+  while (current_addr < mapping->mapping + mapping->mapping_len) {
     uint16_t flags = 0;
     void *actual_addr = virtual_to_physical(page_dir, current_addr, &flags);
     if (!actual_addr || !(flags & PRESENT)) {
@@ -239,11 +253,11 @@ void flush_pages(uint32_t *page_dir, struct file *backing_file) {
 
     if (flags & DIRTY) {
       // Flush dirty pages to disk
-      uint32_t offset =
-          (uint32_t)current_addr - (uint32_t)backing_file->mapping;
-      size_t write_len = backing_file->mapping_len - offset < PAGE_SIZE
-                             ? backing_file->mapping_len - offset
+      uint32_t offset = (uint32_t)current_addr - (uint32_t)mapping->mapping;
+      size_t write_len = mapping->mapping_len - offset < PAGE_SIZE
+                             ? mapping->mapping_len - offset
                              : PAGE_SIZE;
+      offset += mapping->offset;
       write_fat32(backing_file->path, offset, (uint8_t *)actual_addr,
                   write_len);
       *page_table_entry ^= DIRTY;

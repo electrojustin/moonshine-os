@@ -606,7 +606,7 @@ char read_fat32(char *path, uint8_t *buf, size_t len) {
 uint32_t read_fat32(uint32_t inode, uint32_t offset, uint8_t *buf, size_t len) {
   uint32_t cluster = inode;
   int index;
-  for (index = 0; index + cluster_size < offset &&
+  for (index = 0; index + cluster_size <= offset &&
                   (cluster & 0x0FFFFFFF) < END_OF_FILE_CLUSTER;
        index += cluster_size) {
     cluster = file_allocation_table[cluster] & 0x0FFFFFFF;
@@ -788,7 +788,7 @@ uint32_t write_fat32(char *path, uint32_t offset, uint8_t *buf, size_t len) {
   }
 
   uint64_t index = 0;
-  for (index; index + cluster_size < offset &&
+  for (index; index + cluster_size <= offset &&
               (cluster & 0x0FFFFFFF) < END_OF_FILE_CLUSTER;
        index += cluster_size) {
     last_cluster = cluster;

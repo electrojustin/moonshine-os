@@ -24,6 +24,7 @@ using arch::memory::user_read_only;
 using arch::memory::user_read_write;
 using arch::memory::virtual_to_physical;
 using filesystem::file;
+using filesystem::file_mapping;
 using lib::std::kmalloc;
 using lib::std::kmalloc_aligned;
 using lib::std::make_string_copy;
@@ -110,7 +111,11 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
   struct file *current_file = parent_proc->open_files;
   new_proc->open_files = nullptr;
   while (current_file) {
-    flush_pages(parent_proc->page_dir, current_file);
+    struct file_mapping *current_mapping = current_file->mappings;
+    while (current_mapping) {
+      flush_pages(parent_proc->page_dir, current_file, current_mapping);
+      current_mapping = current_mapping->next;
+    }
     struct file *new_file = (struct file *)kmalloc(sizeof(struct file));
     memcpy((char *)current_file, (char *)new_file, sizeof(struct file));
     new_file->path = make_string_copy(new_file->path);

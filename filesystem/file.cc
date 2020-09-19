@@ -23,8 +23,7 @@ void load_file(struct file *file) {
   struct directory_entry file_stats = stat_fat32(file->path);
   file->size = file_stats.size;
 
-  file->mapping = nullptr;
-  file->mapping_len = 0;
+  file->mappings = nullptr;
 
   if (file_stats.name) {
     kfree(file_stats.name);

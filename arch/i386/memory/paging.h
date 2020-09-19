@@ -17,6 +17,7 @@ namespace memory {
 namespace {
 
 using filesystem::file;
+using filesystem::file_mapping;
 using proc::process;
 
 } // namespace
@@ -80,7 +81,8 @@ char *make_virtual_string_copy(uint32_t *page_dir, char *virtual_string);
 
 char swap_in_page(struct process *proc, void *virtual_addr);
 
-void flush_pages(uint32_t *page_dir, struct file *backing_file);
+void flush_pages(uint32_t *page_dir, struct file *backing_file,
+                 struct file_mapping *mapping);
 
 } // namespace memory
 } // namespace arch

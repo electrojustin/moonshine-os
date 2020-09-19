@@ -299,6 +299,7 @@ proc/brk.o: proc/brk.cc \
 	gcc $(CFLAGS) -c proc/brk.cc -o proc/brk.o
 proc/close.o: proc/close.cc \
 	      proc/close.h \
+	      arch/i386/memory/paging.h \
 	      filesystem/file.h \
 	      lib/std/memory.h \
 	      proc/process.h
@@ -316,6 +317,7 @@ proc/fork.o: proc/fork.cc \
 	     proc/fork.h \
 	     arch/i386/cpu/sse.h \
 	     arch/i386/memory/gdt.h \
+	     arch/i386/memory/paging.h \
 	     filesystem/file.h \
 	     lib/std/memory.h \
 	     lib/std/string.h \

@@ -11,11 +11,11 @@ int main(void) {
 
   printf("%d\n", file);
 
-  buf = (char *)mmap(nullptr, 4300, PROT_WRITE, MAP_SHARED, file, 0);
+  buf = (char *)mmap(nullptr, 4300, PROT_WRITE, MAP_SHARED, file, 4096);
 
   printf("%c\n", buf[1]);
 
-  for (int i = 0; i < 200; i++) {
+  for (int i = 0; i < 10; i++) {
     buf[i] = (char)((i % 26) + 65);
   }
 

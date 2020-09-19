@@ -6,6 +6,14 @@
 
 namespace filesystem {
 
+struct file_mapping {
+  void *mapping;
+  size_t mapping_len;
+  uint32_t offset;
+  struct file_mapping *next;
+  struct file_mapping *prev;
+};
+
 struct file {
   uint32_t file_descriptor;
   char *path;
@@ -13,8 +21,7 @@ struct file {
   uint32_t inode; // Actually just cluster num
   uint32_t size;
   uint32_t offset;
-  void *mapping;
-  size_t mapping_len;
+  struct file_mapping *mappings;
   struct file *next;
   struct file *prev;
 };
