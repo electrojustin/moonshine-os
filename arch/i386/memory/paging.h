@@ -48,7 +48,7 @@ void map_memory_range_offset(uint32_t *page_directory,
 
 void map_memory_segment(struct process *proc, uint32_t physical_address,
                         uint32_t virtual_address, size_t len,
-                        enum permission page_permissions);
+                        enum permission page_permissions, uint16_t flags = 0);
 
 // Sets the CR3 register to a pointer to the current page directory.
 static void inline set_page_directory(uint32_t *page_directory) {
@@ -82,7 +82,8 @@ char *make_virtual_string_copy(uint32_t *page_dir, char *virtual_string);
 char swap_in_page(struct process *proc, void *virtual_addr);
 
 void flush_pages(uint32_t *page_dir, struct file *backing_file,
-                 struct file_mapping *mapping);
+                 struct file_mapping *mapping, void *start_addr = nullptr,
+                 void *stop_addr = nullptr);
 
 uint32_t *get_page_table_entry(uint32_t *page_dir, void *virtual_addr);
 

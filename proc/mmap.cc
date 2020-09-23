@@ -98,7 +98,12 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
       while (mapping) {
         if ((uint32_t)mapping->mapping <= req_addr &&
             (uint32_t)mapping->mapping + mapping->mapping_len > req_addr) {
-          flush_pages(current_process->page_dir, to_flush, mapping);
+          void *stop_addr =
+              (uint32_t)mapping->mapping + mapping->mapping_len < req_addr + len
+                  ? mapping->mapping + mapping->mapping_len
+                  : (void *)req_addr + len;
+          flush_pages(current_process->page_dir, to_flush, mapping,
+                      (void *)req_addr, stop_addr);
         }
         mapping = mapping->next;
       }

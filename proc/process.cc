@@ -59,13 +59,11 @@ void cleanup_process(struct process *to_cleanup) {
     }
   }
   kfree(to_cleanup->segments);
-
   struct file *current_file = to_cleanup->open_files;
   while (current_file) {
     close_file(to_cleanup, current_file);
     current_file = to_cleanup->open_files;
   }
-
   for (int i = 0; i < to_cleanup->num_page_tables; i++) {
     kfree(to_cleanup->page_tables[i]);
   }

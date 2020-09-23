@@ -40,9 +40,6 @@ __attribute__((interrupt)) void page_fault(struct interrupt_frame *frame,
     if (!swap_in_page(current_process,
                       (void *)(page_fault_addr & (~(PAGE_SIZE - 1))))) {
       print_error((char *)"Segmentation Fault");
-      while (1) {
-        asm volatile("hlt\n");
-      }
       kill_current_process();
     } else {
       set_page_directory(page_dir);

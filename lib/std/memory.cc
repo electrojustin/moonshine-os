@@ -192,11 +192,11 @@ void kfree(void *alloc) {
 
   struct chunk_header *to_free = (struct chunk_header *)alloc - 1;
 
-  if (!to_free->allocated) {
-    panic("Double free detected!");
-  }
   if (to_free->checksum != checksum(to_free)) {
     panic("Heap corruption detected!");
+  }
+  if (!to_free->allocated) {
+    panic("Double free detected!");
   }
 
   to_free->allocated = 0;

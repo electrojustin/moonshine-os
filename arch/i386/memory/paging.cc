@@ -28,6 +28,7 @@ using proc::process;
 
 constexpr uint16_t PRESENT = 0x1;
 constexpr uint16_t DIRTY = 0x40;
+constexpr uint16_t FILE_BACKED = 0x400;
 
 } // namespace
 
@@ -94,7 +95,7 @@ void map_memory_range_offset(uint32_t *page_directory,
 
 void map_memory_segment(struct process *proc, uint32_t physical_address,
                         uint32_t virtual_address, size_t len,
-                        enum permission page_permissions) {
+                        enum permission page_permissions, uint16_t flags) {
   uint32_t current_address = virtual_address;
   uint32_t *page_table;
   while (current_address < virtual_address + len) {
@@ -121,9 +122,9 @@ void map_memory_segment(struct process *proc, uint32_t physical_address,
 
     if (physical_address) {
       page_table[(current_address >> 12) & 0x3FF] =
-          physical_address | page_permissions | 0x1;
+          physical_address | page_permissions | 0x1 | flags;
     } else {
-      page_table[(current_address >> 12) & 0x3FF] = page_permissions;
+      page_table[(current_address >> 12) & 0x3FF] = page_permissions | flags;
     }
 
     current_address += PAGE_SIZE;
@@ -227,7 +228,7 @@ char swap_in_page(struct process *proc, void *virtual_addr) {
   void *actual_addr = kmalloc_aligned(PAGE_SIZE, PAGE_SIZE);
 
   map_memory_segment(proc, (uint32_t)actual_addr, (uint32_t)virtual_addr,
-                     PAGE_SIZE, user_read_write);
+                     PAGE_SIZE, user_read_write, FILE_BACKED);
 
   uint32_t offset = (uint32_t)virtual_addr - (uint32_t)current_mapping->mapping;
   size_t read_len = current_mapping->mapping_len - offset < PAGE_SIZE
@@ -246,12 +247,17 @@ char swap_in_page(struct process *proc, void *virtual_addr) {
 }
 
 void flush_pages(uint32_t *page_dir, struct file *backing_file,
-                 struct file_mapping *mapping) {
+                 struct file_mapping *mapping, void *start_addr,
+                 void *stop_addr) {
   void *current_addr = mapping->mapping;
-  while (current_addr < mapping->mapping + mapping->mapping_len) {
+  if (start_addr) {
+    current_addr = start_addr;
+  }
+  while (current_addr < mapping->mapping + mapping->mapping_len &&
+         (!stop_addr || current_addr < stop_addr)) {
     uint16_t flags = 0;
     void *actual_addr = virtual_to_physical(page_dir, current_addr, &flags);
-    if (!actual_addr || !(flags & PRESENT)) {
+    if (!actual_addr || !(flags & PRESENT) || !(flags & FILE_BACKED)) {
       current_addr += PAGE_SIZE;
       continue;
     }
@@ -274,7 +280,6 @@ void flush_pages(uint32_t *page_dir, struct file *backing_file,
     kfree(actual_addr);
 
     *page_table_entry ^= PRESENT;
-    actual_addr = virtual_to_physical(page_dir, current_addr, &flags);
 
     current_addr += PAGE_SIZE;
   }
