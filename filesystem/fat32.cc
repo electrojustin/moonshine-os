@@ -293,11 +293,10 @@ uint32_t parse_long_filename(char *buf, char **filename) {
             // a deleted entry
 }
 
-struct directory_table_entry
-find_directory_entry(char *path, uint32_t current_cluster = root_dir_cluster,
-                     char return_long_filenames = true,
-                     uint32_t *dir_table_cluster = nullptr,
-                     uint8_t **dir_table_buf = nullptr) {
+struct directory_table_entry find_directory_entry(
+    char *path, uint32_t current_cluster = root_dir_cluster,
+    char return_long_filenames = true, uint32_t *dir_table_cluster = nullptr,
+    uint8_t **dir_table_buf = nullptr, size_t *dir_table_buf_size = nullptr) {
   struct directory_table_entry ret;
   ret.filename[0] = 0;
   ret.reserved = 0;
@@ -314,14 +313,26 @@ find_directory_entry(char *path, uint32_t current_cluster = root_dir_cluster,
     current_name = substring(path, 0, next_dir);
   }
 
+  size_t table_size = cluster_size;
   struct directory_table_entry *dir_table =
-      (struct directory_table_entry *)kmalloc(cluster_size);
+      (struct directory_table_entry *)kmalloc(table_size);
   read_clusters(current_cluster, (uint8_t *)dir_table, cluster_size);
+  current_cluster = file_allocation_table[current_cluster] & 0x0FFFFFFF;
+  while ((current_cluster & 0x0FFFFFFF) < END_OF_FILE_CLUSTER) {
+    table_size += cluster_size;
+    dir_table = (struct directory_table_entry *)krealloc(dir_table, table_size);
+    read_clusters(current_cluster,
+                  (uint8_t *)dir_table + table_size - cluster_size,
+                  cluster_size);
+    current_cluster = file_allocation_table[current_cluster] & 0x0FFFFFFF;
+  }
+
   char eight_three_filename[12] = {0};
   parse_eight_three_filename(current_name, eight_three_filename);
   char *long_filename = nullptr;
-  for (int i = 0; i < cluster_size / sizeof(struct directory_table_entry);
-       i++) {
+
+  int i = 0;
+  for (i = 0; i < table_size / sizeof(struct directory_table_entry); i++) {
     if (!dir_table[i].filename[0]) {
       kfree(dir_table);
       if (next_dir >= 0) {
@@ -332,7 +343,8 @@ find_directory_entry(char *path, uint32_t current_cluster = root_dir_cluster,
       ret = dir_table[i];
       ret.reserved = 0;
       break;
-    } else if (dir_table[i].attributes == LONG_FILE_NAME) {
+    } else if (eight_three_filename[0] != 'U' &&
+               dir_table[i].attributes == LONG_FILE_NAME) {
       uint32_t num_entries =
           parse_long_filename((char *)&dir_table[i], &long_filename);
       if (streq(long_filename, current_name, 13 * num_entries)) {
@@ -355,6 +367,7 @@ find_directory_entry(char *path, uint32_t current_cluster = root_dir_cluster,
     if (!dir_table_buf) {
       kfree(dir_table);
     } else {
+      *dir_table_buf_size = table_size;
       *dir_table_buf = (uint8_t *)dir_table;
       *dir_table_cluster = current_cluster;
     }
@@ -528,12 +541,27 @@ char add_directory_entry(char *dir_path, char *name, uint32_t attributes,
       create_long_filename_entries(name, checksum, &long_filename_entries);
   int num_dir_entries = 1 + num_long_filename_entries;
 
+  size_t table_size = cluster_size;
   struct directory_table_entry *dir_table =
-      (struct directory_table_entry *)kmalloc(cluster_size);
-  read_clusters(dir_cluster, (uint8_t *)dir_table, cluster_size);
+      (struct directory_table_entry *)kmalloc(table_size);
+  uint32_t current_cluster = dir_cluster;
+  read_clusters(current_cluster, (uint8_t *)dir_table, cluster_size);
+  uint32_t last_cluster = current_cluster;
+  current_cluster = file_allocation_table[current_cluster] & 0x0FFFFFFF;
+  while ((current_cluster & 0x0FFFFFFF) < END_OF_FILE_CLUSTER) {
+    table_size += cluster_size;
+    dir_table = (struct directory_table_entry *)krealloc(dir_table, table_size);
+    read_clusters(current_cluster,
+                  (uint8_t *)dir_table + table_size - cluster_size,
+                  cluster_size);
+    last_cluster = current_cluster;
+    current_cluster = file_allocation_table[current_cluster] & 0x0FFFFFFF;
+  }
+
   int i = 0;
   int contiguous_free_entries = 0;
-  for (i = 0; i < cluster_size / sizeof(struct directory_table_entry); i++) {
+
+  for (i = 0; i < table_size / sizeof(struct directory_table_entry); i++) {
     if (dir_table[i].filename[0] == DELETED_DIR_ENTRY) {
       contiguous_free_entries++;
     } else if (!dir_table[i].filename[0]) {
@@ -548,10 +576,14 @@ char add_directory_entry(char *dir_path, char *name, uint32_t attributes,
     }
   }
 
-  if (i == cluster_size / sizeof(struct directory_table_entry)) {
-    kfree(long_filename_entries);
-    kfree(dir_table);
-    return 0;
+  if (i == table_size / sizeof(struct directory_table_entry)) {
+    size_t old_table_size = table_size;
+    table_size +=
+        contiguous_free_entries * sizeof(struct directory_table_entry);
+    dir_table = (struct directory_table_entry *)krealloc(dir_table, table_size);
+    uint32_t new_cluster = alloc_cluster(table_size - old_table_size);
+    file_allocation_table[last_cluster] = new_cluster;
+    flush_fat();
   }
 
   memcpy((char *)long_filename_entries,
@@ -563,7 +595,7 @@ char add_directory_entry(char *dir_path, char *name, uint32_t attributes,
   dir_table[i].file_size = len;
   dir_table[i].cluster_num_low = cluster & 0xFFFF;
   dir_table[i].cluster_num_high = cluster >> 16;
-  write_clusters(dir_cluster, (uint8_t *)dir_table, cluster_size);
+  write_clusters(dir_cluster, (uint8_t *)dir_table, table_size);
   kfree(long_filename_entries);
   kfree(dir_table);
   return 1;
@@ -606,6 +638,7 @@ char read_fat32(char *path, uint8_t *buf, size_t len) {
 uint32_t read_fat32(uint32_t inode, uint32_t offset, uint8_t *buf, size_t len) {
   uint32_t cluster = inode;
   int index;
+
   for (index = 0; index + cluster_size <= offset &&
                   (cluster & 0x0FFFFFFF) < END_OF_FILE_CLUSTER;
        index += cluster_size) {
@@ -617,22 +650,25 @@ uint32_t read_fat32(uint32_t inode, uint32_t offset, uint8_t *buf, size_t len) {
   }
 
   uint8_t *temp_buf = (uint8_t *)kmalloc(cluster_size);
-  uint32_t temp_len = read_clusters(cluster, temp_buf, cluster_size);
+  size_t read_len = len < cluster_size ? len : cluster_size;
+  uint32_t temp_len = read_clusters(cluster, temp_buf, read_len);
   for (int i = offset - index; i < temp_len; i++) {
     *buf = temp_buf[i];
     buf++;
   }
   kfree(temp_buf);
-
   cluster = file_allocation_table[cluster] & 0x0FFFFFFF;
 
   if (cluster >= END_OF_FILE_CLUSTER) {
     return temp_len - (offset - index);
   }
+  if (len > temp_len - (offset - index)) {
+    len -= temp_len - (offset - index);
 
-  len -= temp_len - (offset - index);
-
-  return (temp_len - (offset - index)) + read_clusters(cluster, buf, len);
+    return (temp_len - (offset - index)) + read_clusters(cluster, buf, len);
+  } else {
+    return len;
+  }
 }
 
 struct directory_entry stat_fat32(char *path) {
@@ -667,22 +703,32 @@ struct directory_entry stat_fat32(char *path) {
 }
 
 struct directory ls_fat32(char *path) {
-  uint32_t cluster;
-  cluster = find_cluster(path, root_dir_cluster);
+  uint32_t current_cluster;
+  current_cluster = find_cluster(path, root_dir_cluster);
   struct directory ret;
 
-  if (cluster == INVALID_CLUSTER) {
+  if (current_cluster == INVALID_CLUSTER) {
     ret.num_children = 0;
     ret.children = nullptr;
     return ret;
   }
 
+  size_t table_size = cluster_size;
   struct directory_table_entry *dir_table =
-      (struct directory_table_entry *)kmalloc(cluster_size);
-  read_clusters(cluster, (uint8_t *)dir_table, cluster_size);
+      (struct directory_table_entry *)kmalloc(table_size);
+  read_clusters(current_cluster, (uint8_t *)dir_table, cluster_size);
+  current_cluster = file_allocation_table[current_cluster] & 0x0FFFFFFF;
+  while ((current_cluster & 0x0FFFFFFF) < END_OF_FILE_CLUSTER) {
+    table_size += cluster_size;
+    dir_table = (struct directory_table_entry *)krealloc(dir_table, table_size);
+    read_clusters(current_cluster,
+                  (uint8_t *)dir_table + table_size - cluster_size,
+                  cluster_size);
+    current_cluster = file_allocation_table[current_cluster] & 0x0FFFFFFF;
+  }
+
   uint32_t num_children = 0;
-  for (int i = 0; i < cluster_size / sizeof(struct directory_table_entry);
-       i++) {
+  for (int i = 0; i < table_size / sizeof(struct directory_table_entry); i++) {
     if (!dir_table[i].filename[0]) {
       break;
     }
@@ -697,8 +743,7 @@ struct directory ls_fat32(char *path) {
   ret.children = (struct directory_entry *)kmalloc(
       num_children * sizeof(struct directory_entry));
   int child_index = 0;
-  for (int i = 0; i < cluster_size / sizeof(struct directory_table_entry);
-       i++) {
+  for (int i = 0; i < table_size / sizeof(struct directory_table_entry); i++) {
     if (!dir_table[i].filename[0]) {
       break;
     }
@@ -757,23 +802,26 @@ uint32_t write_new_fat32(char *path, uint8_t attributes, uint8_t *buf,
 
 char update_file_length(char *path, size_t new_len) {
   uint8_t *buf = nullptr;
+  size_t buf_size;
   uint32_t cluster = INVALID_CLUSTER;
-  struct directory_table_entry entry =
-      find_directory_entry(path, root_dir_cluster, false, &cluster, &buf);
+  struct directory_table_entry entry = find_directory_entry(
+      path, root_dir_cluster, false, &cluster, &buf, &buf_size);
 
   if (!buf) {
     return 0;
   }
 
   struct directory_table_entry *table = (struct directory_table_entry *)buf;
-  for (int i = 0; i < cluster_size / sizeof(struct directory_table_entry);
-       i++) {
+  int i = 0;
+  while (table[i].filename[0]) {
     if (streq(entry.filename, table[i].filename, 11)) {
       table[i].file_size = new_len;
-      write_clusters(cluster, buf, cluster_size);
+      write_clusters(cluster, buf, buf_size);
       kfree(buf);
       return 1;
     }
+
+    i++;
   }
 
   return 0;
@@ -918,14 +966,26 @@ char del_fat32(char *path) {
   }
 
   int dir_entry_index = -1;
+
+  size_t table_size = cluster_size;
   struct directory_table_entry *dir_table =
-      (struct directory_table_entry *)kmalloc(cluster_size);
-  read_clusters(parent_cluster, (uint8_t *)dir_table, cluster_size);
+      (struct directory_table_entry *)kmalloc(table_size);
+  uint32_t current_cluster = parent_cluster;
+  read_clusters(current_cluster, (uint8_t *)dir_table, cluster_size);
+  current_cluster = file_allocation_table[current_cluster] & 0x0FFFFFFF;
+  while ((current_cluster & 0x0FFFFFFF) < END_OF_FILE_CLUSTER) {
+    table_size += cluster_size;
+    dir_table = (struct directory_table_entry *)krealloc(dir_table, table_size);
+    read_clusters(current_cluster,
+                  (uint8_t *)dir_table + table_size - cluster_size,
+                  cluster_size);
+    current_cluster = file_allocation_table[current_cluster] & 0x0FFFFFFF;
+  }
+
   char eight_three_filename[12] = {0};
   parse_eight_three_filename(name, eight_three_filename);
   char *long_filename = nullptr;
-  for (int i = 0; i < cluster_size / sizeof(struct directory_table_entry);
-       i++) {
+  for (int i = 0; i < table_size / sizeof(struct directory_table_entry); i++) {
     if (!dir_table[i].filename[0]) {
       break;
     } else if (dir_table[i].filename[0] == DELETED_DIR_ENTRY) {
@@ -963,7 +1023,7 @@ char del_fat32(char *path) {
     }
     dir_table[i].filename[0] = DELETED_DIR_ENTRY;
   }
-  write_clusters(parent_cluster, (uint8_t *)dir_table, cluster_size);
+  write_clusters(parent_cluster, (uint8_t *)dir_table, table_size);
 
   kfree(dir_path);
   kfree(name);

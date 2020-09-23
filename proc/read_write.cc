@@ -32,7 +32,7 @@ using lib::std::strlen;
 
 uint32_t write_internal(struct process *current_process,
                         uint32_t file_descriptor, uint8_t *buf, uint32_t size) {
-  if (file_descriptor < 2) {
+  if (file_descriptor < 3) {
     for (int i = 0; i < size; i++) {
       lib::std::putc(buf[i]);
     }
@@ -80,10 +80,8 @@ uint32_t read_from_keyboard(struct process *current_process, char *buf,
   return size;
 }
 
-} // namespace
-
-uint32_t read(uint32_t file_descriptor, uint32_t dest, uint32_t size,
-              uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
+uint32_t read_internal(uint32_t file_descriptor, uint32_t dest, uint32_t size,
+                       char use_seek, uint32_t offset) {
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
 
@@ -99,18 +97,19 @@ uint32_t read(uint32_t file_descriptor, uint32_t dest, uint32_t size,
       return -1;
     }
 
+    uint32_t offset = use_seek ? to_read->offset : offset;
+
     uint32_t read_size = 0;
     if (to_read->buffer) {
-      read_size = size < (to_read->size - to_read->offset)
-                      ? size
-                      : (to_read->size - to_read->offset);
+      read_size =
+          size < (to_read->size - offset) ? size : (to_read->size - offset);
       if (read_size) {
         physical_to_virtual_memcpy(page_dir, to_read->buffer, (char *)dest,
                                    read_size);
       }
     } else if (to_read->inode) {
       uint8_t *temp_buf = (uint8_t *)kmalloc(size);
-      read_size = read_fat32(to_read->inode, to_read->offset, temp_buf, size);
+      read_size = read_fat32(to_read->inode, offset, temp_buf, size);
       if (read_size) {
         physical_to_virtual_memcpy(page_dir, (char *)temp_buf, (char *)dest,
                                    read_size);
@@ -120,10 +119,24 @@ uint32_t read(uint32_t file_descriptor, uint32_t dest, uint32_t size,
       return -1;
     }
 
-    to_read->offset += read_size;
+    if (use_seek) {
+      to_read->offset += read_size;
+    }
 
     return read_size;
   }
+}
+
+} // namespace
+
+uint32_t read(uint32_t file_descriptor, uint32_t dest, uint32_t size,
+              uint32_t reserved1, uint32_t reserved2, uint32_t reserved3) {
+  read_internal(file_descriptor, dest, size, 1, 0);
+}
+
+uint32_t pread64(uint32_t file_descriptor, uint32_t dest, uint32_t size,
+                 uint32_t offset, uint32_t reserved1, uint32_t reserved2) {
+  read_internal(file_descriptor, dest, size, 0, offset);
 }
 
 uint32_t readlink(uint32_t path_addr, uint32_t buf_addr, uint32_t len,

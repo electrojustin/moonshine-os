@@ -51,7 +51,12 @@ uint32_t close(uint32_t file_descriptor, uint32_t reserved1, uint32_t reserved2,
   struct file *current_file = current_process->open_files;
   while (current_file) {
     if (current_file->file_descriptor == file_descriptor) {
-      close_file(current_process, current_file);
+      if (!current_file->mappings) {
+        // Mappings are supposed to persist after the file closes
+        close_file(current_process, current_file);
+      } else {
+        current_file->can_free = 1;
+      }
       return 0;
     }
 

@@ -25,6 +25,8 @@ void load_file(struct file *file) {
 
   file->mappings = nullptr;
 
+  file->can_free = 0;
+
   if (file_stats.name) {
     kfree(file_stats.name);
     file->inode = file_stats.inode;

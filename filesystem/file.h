@@ -10,12 +10,14 @@ struct file_mapping {
   void *mapping;
   size_t mapping_len;
   uint32_t offset;
+  char is_private;
   struct file_mapping *next;
   struct file_mapping *prev;
 };
 
 struct file {
   uint32_t file_descriptor;
+  char can_free;
   char *path;
   char *buffer;
   uint32_t inode; // Actually just cluster num

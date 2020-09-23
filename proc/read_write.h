@@ -21,6 +21,9 @@ struct __attribute__((packed)) io_vector {
 uint32_t read(uint32_t file_descriptor, uint32_t dest, uint32_t size,
               uint32_t reserved1, uint32_t reserved2, uint32_t reserved3);
 
+uint32_t pread64(uint32_t file_descriptor, uint32_t dest, uint32_t size,
+                 uint32_t offset, uint32_t reserved1, uint32_t reserved2);
+
 uint32_t readlink(uint32_t path_addr, uint32_t buf_addr, uint32_t len,
                   uint32_t reserved1, uint32_t reserved2, uint32_t reserved3);
 

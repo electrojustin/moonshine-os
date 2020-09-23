@@ -1,5 +1,5 @@
 CFLAGS="-m32" "-ffreestanding" "-mno-red-zone" "-fno-exceptions" "-fno-rtti" "-nostdlib" "-I$(shell pwd)"
-USERSPACE_CFLAGS="-m32" "-static" "-fPIE"
+USERSPACE_CFLAGS="-m32"
 all: moonshine.bin
 moonshine.bin: boot.o \
 	       main.o \

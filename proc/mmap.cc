@@ -3,6 +3,7 @@
 #include "filesystem/file.h"
 #include "lib/std/memory.h"
 #include "lib/std/stdio.h"
+#include "proc/close.h"
 #include "proc/process.h"
 
 namespace proc {
@@ -20,6 +21,12 @@ using lib::std::kfree;
 using lib::std::kmalloc;
 using lib::std::kmalloc_aligned;
 using lib::std::krealloc;
+using lib::std::memset;
+
+constexpr uint32_t MAP_SHARED = 0x1;
+constexpr uint32_t MAP_PRIVATE = 0x2;
+constexpr uint32_t MAP_FIXED = 0x10;
+constexpr uint32_t MAP_ANONYMOUS = 0x20;
 
 uint32_t msync_internal(uint32_t req_addr, uint32_t len, uint32_t flags,
                         char should_delete_mapping) {
@@ -59,6 +66,10 @@ uint32_t msync_internal(uint32_t req_addr, uint32_t len, uint32_t flags,
     }
 
     kfree(current_mapping);
+
+    if (!to_sync->mappings && to_sync->can_free) {
+      close_file(current_process, to_sync);
+    }
   }
 
   return 0;
@@ -70,12 +81,30 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
 
-  if (!req_addr || get_page_table_entry(page_dir, (void *)req_addr)) {
-    req_addr = (current_process->lower_brk - len) & (~(PAGE_SIZE - 1));
-    current_process->lower_brk = req_addr;
+  if (!req_addr || (get_page_table_entry(page_dir, (void *)req_addr) &&
+                    !(flags & MAP_FIXED))) {
+    req_addr = current_process->lower_brk;
+    current_process->lower_brk += len;
+    if (current_process->lower_brk & (PAGE_SIZE - 1)) {
+      current_process->lower_brk =
+          (current_process->lower_brk & (~(PAGE_SIZE - 1))) + PAGE_SIZE;
+    }
   }
 
-  if (!file_descriptor) {
+  if (!file_descriptor || flags & MAP_ANONYMOUS) {
+    struct file *to_flush = current_process->open_files;
+    while (to_flush) {
+      struct file_mapping *mapping = to_flush->mappings;
+      while (mapping) {
+        if ((uint32_t)mapping->mapping <= req_addr &&
+            (uint32_t)mapping->mapping + mapping->mapping_len > req_addr) {
+          flush_pages(current_process->page_dir, to_flush, mapping);
+        }
+        mapping = mapping->next;
+      }
+      to_flush = to_flush->next;
+    }
+
     current_process->num_segments++;
     current_process->segments = (struct process_memory_segment *)krealloc(
         current_process->segments,
@@ -96,6 +125,8 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
     map_memory_segment(current_process, (uint32_t)new_segment->actual_address,
                        (uint32_t)new_segment->virtual_address, segment_size,
                        user_read_write);
+    memset((char *)new_segment->actual_address, segment_size, 0);
+
     return req_addr;
   } else {
     struct file *to_map = current_process->open_files;
@@ -116,6 +147,10 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
     new_mapping->mapping = (void *)req_addr;
     new_mapping->mapping_len = len;
     new_mapping->offset = offset * PAGE_SIZE;
+    new_mapping->is_private = 1;
+    if (flags & MAP_SHARED) {
+      new_mapping->is_private = 0;
+    }
     to_map->mappings = new_mapping;
 
     return req_addr;

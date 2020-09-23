@@ -125,6 +125,19 @@ uint32_t openat(uint32_t directory_fd, uint32_t path_addr, uint32_t flags,
 
 uint32_t access(uint32_t path_addr, uint32_t mode, uint32_t reserved1,
                 uint32_t reserved2, uint32_t reserved3, uint32_t reserved4) {
+  struct process *current_process = get_currently_executing_process();
+  uint32_t *page_dir = current_process->page_dir;
+  char *path = make_virtual_string_copy(page_dir, (char *)path_addr);
+
+  struct directory_entry dir_entry = stat_fat32(path);
+
+  if (!dir_entry.name) {
+    kfree(path);
+    return -1;
+  }
+
+  kfree(path);
+  kfree(dir_entry.name);
   return 0;
 }
 

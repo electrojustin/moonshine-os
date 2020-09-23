@@ -22,6 +22,7 @@ using arch::interrupts::disable_interrupts;
 using arch::interrupts::enable_interrupts;
 using arch::memory::enable_paging;
 using arch::memory::flush_tss;
+using arch::memory::get_page_table_entry;
 using arch::memory::main_tss;
 using arch::memory::map_memory_segment;
 using arch::memory::PAGE_SIZE;
@@ -52,8 +53,18 @@ constexpr uint64_t STACK_CANARY = 0xDEADBEEFDEADBEEF;
 void cleanup_process(struct process *to_cleanup) {
   for (int i = 0; i < to_cleanup->num_segments; i++) {
     kfree(to_cleanup->segments[i].actual_address);
+    if (to_cleanup->segments[i].virtual_address) {
+      *get_page_table_entry(to_cleanup->page_dir,
+                            to_cleanup->segments[i].virtual_address) = 0;
+    }
   }
   kfree(to_cleanup->segments);
+
+  struct file *current_file = to_cleanup->open_files;
+  while (current_file) {
+    close_file(to_cleanup, current_file);
+    current_file = to_cleanup->open_files;
+  }
 
   for (int i = 0; i < to_cleanup->num_page_tables; i++) {
     kfree(to_cleanup->page_tables[i]);
@@ -72,12 +83,6 @@ void cleanup_process(struct process *to_cleanup) {
 
   kfree(to_cleanup->path);
   kfree(to_cleanup->working_dir);
-
-  struct file *current_file = to_cleanup->open_files;
-  while (current_file) {
-    close_file(to_cleanup, current_file);
-    current_file = to_cleanup->open_files;
-  }
 
   if (to_cleanup->next == to_cleanup) {
     process_list = nullptr;
@@ -258,7 +263,6 @@ char spawn_new_process(char *path, int argc, char **argv,
   new_proc->esp =
       ((uint32_t)stack_segment->virtual_address + stack_segment->segment_size) &
       0xFFFFFFFC; // Stacks are generally 4 byte aligned
-  new_proc->lower_brk = stack_bottom;
 
   // Add a kernel stack segment
   struct process_memory_segment *kernel_stack_segment =
@@ -298,6 +302,8 @@ char spawn_new_process(char *path, int argc, char **argv,
              new_proc->segments[i].disk_size);
     }
   }
+
+  new_proc->lower_brk = new_proc->brk / 2;
 
   new_proc->kernel_stack_top = ((uint32_t)kernel_stack_segment->actual_address +
                                 kernel_stack_segment->segment_size) &
@@ -364,7 +370,7 @@ char spawn_new_process(char *path, int argc, char **argv,
 
   // Initialize the file descriptors
   new_proc->open_files = nullptr;
-  new_proc->next_file_descriptor = 2; // STDOUT and STDIN are 0 and 1
+  new_proc->next_file_descriptor = 3; // STDOUT and STDIN are 0 and 1
 
   // Set process as runnable
   new_proc->process_state = NEW;

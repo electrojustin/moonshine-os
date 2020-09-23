@@ -234,7 +234,14 @@ char swap_in_page(struct process *proc, void *virtual_addr) {
                         ? current_mapping->mapping_len - offset
                         : PAGE_SIZE;
   offset += current_mapping->offset;
-  read_fat32(current_file->inode, offset, (uint8_t *)actual_addr, read_len);
+  uint32_t read_size =
+      read_fat32(current_file->inode, offset, (uint8_t *)actual_addr, read_len);
+  if (!read_size) {
+    return 0;
+  } else if (read_size < PAGE_SIZE) {
+    memset((char *)actual_addr + read_size, PAGE_SIZE - read_size, 0);
+  }
+
   return 1;
 }
 
@@ -251,7 +258,7 @@ void flush_pages(uint32_t *page_dir, struct file *backing_file,
 
     uint32_t *page_table_entry = get_page_table_entry(page_dir, current_addr);
 
-    if (flags & DIRTY) {
+    if (!mapping->is_private && flags & DIRTY) {
       // Flush dirty pages to disk
       uint32_t offset = (uint32_t)current_addr - (uint32_t)mapping->mapping;
       size_t write_len = mapping->mapping_len - offset < PAGE_SIZE
@@ -267,6 +274,7 @@ void flush_pages(uint32_t *page_dir, struct file *backing_file,
     kfree(actual_addr);
 
     *page_table_entry ^= PRESENT;
+    actual_addr = virtual_to_physical(page_dir, current_addr, &flags);
 
     current_addr += PAGE_SIZE;
   }
