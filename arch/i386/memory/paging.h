@@ -68,14 +68,16 @@ static void inline enable_paging(void) {
                : "ecx");
 }
 
-void *virtual_to_physical(uint32_t *page_dir, void *virtual_addr,
-                          uint16_t *flags = nullptr);
+void *virtual_to_physical(uint32_t *page_dir, void *virtual_addr);
 
 void physical_to_virtual_memcpy(uint32_t *page_dir, char *src, char *dest,
                                 size_t size);
 
 void virtual_to_physical_memcpy(uint32_t *page_dir, char *src, char *dest,
                                 size_t size);
+
+void virtual_to_virtual_memcpy(uint32_t *src_page_dir, uint32_t *dest_page_dir,
+                               char *src, char *dest, size_t size);
 
 char *make_virtual_string_copy(uint32_t *page_dir, char *virtual_string);
 
@@ -86,6 +88,9 @@ void flush_pages(uint32_t *page_dir, struct file *backing_file,
                  void *stop_addr = nullptr);
 
 uint32_t *get_page_table_entry(uint32_t *page_dir, void *virtual_addr);
+
+void copy_mapping(struct process *src_proc, struct process *dest_proc,
+                  struct file_mapping *mapping);
 
 } // namespace memory
 } // namespace arch

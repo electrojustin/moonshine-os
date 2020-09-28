@@ -2,6 +2,7 @@
 #define ARCH_INTERRUPTS_PAGE_FAULT_H
 
 #include "arch/i386/memory/paging.h"
+#include "lib/std/stdio.h"
 #include "proc/process.h"
 
 namespace arch {
@@ -12,7 +13,9 @@ namespace {
 using arch::memory::PAGE_SIZE;
 using arch::memory::set_page_directory;
 using arch::memory::swap_in_page;
+using lib::std::print_error;
 using proc::get_currently_executing_process;
+using proc::kill_current_process;
 using proc::process;
 
 uint32_t esi;
@@ -39,6 +42,7 @@ __attribute__((interrupt)) void page_fault(struct interrupt_frame *frame,
 
     if (!swap_in_page(current_process,
                       (void *)(page_fault_addr & (~(PAGE_SIZE - 1))))) {
+      lib::std::printk("%x\n", page_fault_addr);
       print_error((char *)"Segmentation Fault");
       kill_current_process();
     } else {

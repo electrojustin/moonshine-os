@@ -21,9 +21,13 @@ using lib::std::kfree;
 using lib::std::kmalloc;
 using lib::std::kmalloc_aligned;
 using lib::std::krealloc;
+using lib::std::memcpy;
 using lib::std::memset;
 using lib::std::panic;
+using lib::std::print_error;
 using lib::std::strlen;
+using proc::get_currently_executing_process;
+using proc::kill_current_process;
 using proc::process;
 
 constexpr uint16_t PRESENT = 0x1;
@@ -134,20 +138,32 @@ void map_memory_segment(struct process *proc, uint32_t physical_address,
   }
 }
 
-void *virtual_to_physical(uint32_t *page_dir, void *virtual_addr,
-                          uint16_t *flags) {
+void *virtual_to_physical(uint32_t *page_dir, void *virtual_addr) {
   uint32_t offset = (uint32_t)virtual_addr & 0xFFF;
   uint32_t *page_table_entry = get_page_table_entry(page_dir, virtual_addr);
 
-  if (flags) {
-    *flags = *page_table_entry & 0xFFF;
+  if (!(*page_table_entry & PRESENT)) {
+    struct process *current_process = get_currently_executing_process();
+    while (current_process->page_dir != page_dir) {
+      current_process = current_process->next;
+      if (current_process == get_currently_executing_process()) {
+        break;
+      }
+    }
+
+    if (current_process->page_dir != page_dir) {
+      return nullptr;
+    }
+
+    if (!swap_in_page(current_process,
+                      (void *)((uint32_t)virtual_addr & (~(PAGE_SIZE - 1))))) {
+      return nullptr;
+    }
+
+    page_table_entry = get_page_table_entry(page_dir, virtual_addr);
   }
 
   char *return_addr = (char *)(*page_table_entry & (~(0xFFF)));
-
-  if (return_addr == nullptr) {
-    return nullptr;
-  }
 
   return (void *)(return_addr + offset);
 }
@@ -160,7 +176,8 @@ void physical_to_virtual_memcpy(uint32_t *page_dir, char *src, char *dest,
     if (!((uint32_t)(physical_dest) & (PAGE_SIZE - 1))) {
       physical_dest = (char *)virtual_to_physical(page_dir, (void *)dest);
       if (!physical_dest) {
-        panic("Null pointer exception!");
+        print_error((char *)"Segmentation Fault");
+        kill_current_process();
       }
     }
 
@@ -180,7 +197,8 @@ void virtual_to_physical_memcpy(uint32_t *page_dir, char *src, char *dest,
     if (!((uint32_t)(physical_src) & (PAGE_SIZE - 1))) {
       physical_src = (char *)virtual_to_physical(page_dir, (void *)src);
       if (!physical_src) {
-        panic("Null pointer exception!");
+        print_error((char *)"Segmentation Fault");
+        kill_current_process();
       }
     }
 
@@ -189,6 +207,36 @@ void virtual_to_physical_memcpy(uint32_t *page_dir, char *src, char *dest,
     src++;
     current++;
     dest++;
+  }
+}
+
+void virtual_to_virtual_memcpy(uint32_t *src_page_dir, uint32_t *dest_page_dir,
+                               char *src, char *dest, size_t size) {
+  char *physical_src = (char *)virtual_to_physical(src_page_dir, (void *)src);
+  char *physical_dest =
+      (char *)virtual_to_physical(dest_page_dir, (void *)dest);
+  size_t current = 0;
+  while (current < size) {
+    if (!((uint32_t)(physical_src) & (PAGE_SIZE - 1))) {
+      physical_src = (char *)virtual_to_physical(src_page_dir, (void *)src);
+      if (!physical_src) {
+        print_error((char *)"Segmentation Fault");
+        kill_current_process();
+      }
+    }
+    if (!((uint32_t)(physical_dest) & (PAGE_SIZE - 1))) {
+      physical_dest = (char *)virtual_to_physical(dest_page_dir, (void *)dest);
+      if (!physical_dest) {
+        print_error((char *)"Segmentation Fault");
+        kill_current_process();
+      }
+    }
+    *physical_dest = *physical_src;
+    physical_src++;
+    src++;
+    physical_dest++;
+    dest++;
+    current++;
   }
 }
 
@@ -255,16 +303,15 @@ void flush_pages(uint32_t *page_dir, struct file *backing_file,
   }
   while (current_addr < mapping->mapping + mapping->mapping_len &&
          (!stop_addr || current_addr < stop_addr)) {
-    uint16_t flags = 0;
-    void *actual_addr = virtual_to_physical(page_dir, current_addr, &flags);
-    if (!actual_addr || !(flags & PRESENT) || !(flags & FILE_BACKED)) {
+    uint32_t *page_table_entry = get_page_table_entry(page_dir, current_addr);
+    if (!(*page_table_entry & PRESENT) || !(*page_table_entry & FILE_BACKED)) {
       current_addr += PAGE_SIZE;
       continue;
     }
 
-    uint32_t *page_table_entry = get_page_table_entry(page_dir, current_addr);
+    void *actual_addr = virtual_to_physical(page_dir, current_addr);
 
-    if (!mapping->is_private && flags & DIRTY) {
+    if (!mapping->is_private && *page_table_entry & DIRTY) {
       // Flush dirty pages to disk
       uint32_t offset = (uint32_t)current_addr - (uint32_t)mapping->mapping;
       size_t write_len = mapping->mapping_len - offset < PAGE_SIZE
@@ -280,6 +327,26 @@ void flush_pages(uint32_t *page_dir, struct file *backing_file,
     kfree(actual_addr);
 
     *page_table_entry ^= PRESENT;
+
+    current_addr += PAGE_SIZE;
+  }
+}
+
+void copy_mapping(struct process *src_proc, struct process *dest_proc,
+                  struct file_mapping *mapping) {
+  void *current_addr = mapping->mapping;
+  while (current_addr < mapping->mapping + mapping->mapping_len) {
+    uint32_t *page_table_entry =
+        get_page_table_entry(src_proc->page_dir, current_addr);
+
+    if (*page_table_entry & PRESENT && *page_table_entry & FILE_BACKED) {
+      void *actual_addr = kmalloc_aligned(PAGE_SIZE, PAGE_SIZE);
+      map_memory_segment(dest_proc, (uint32_t)actual_addr,
+                         (uint32_t)current_addr, PAGE_SIZE, user_read_write,
+                         FILE_BACKED);
+      memcpy((char *)virtual_to_physical(src_proc->page_dir, current_addr),
+             (char *)actual_addr, PAGE_SIZE);
+    }
 
     current_addr += PAGE_SIZE;
   }

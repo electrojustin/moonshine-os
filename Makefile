@@ -20,6 +20,7 @@ moonshine.bin: boot.o \
 	       filesystem/fat32.o \
 	       filesystem/file.o \
 	       filesystem/mbr.o \
+	       filesystem/pipe.o \
 	       io/keyboard.o \
 	       io/io.o \
 	       io/vga.o \
@@ -68,6 +69,7 @@ moonshine.bin: boot.o \
 		      filesystem/fat32.o \
 		      filesystem/file.o \
 		      filesystem/mbr.o \
+		      filesystem/pipe.o \
 		      io/keyboard.o \
 		      io/io.o \
 		      io/vga.o \
@@ -187,6 +189,7 @@ drivers/keyboard.o: drivers/i386/keyboard.cc \
 		    arch/interrupts/interrupts.h \
 		    arch/i386/interrupts/idt.h \
 		    arch/i386/interrupts/pic.h \
+		    arch/i386/memory/paging.h \
 		    io/i386/io.h \
 		    io/keyboard.h
 	gcc $(CFLAGS) -mgeneral-regs-only -c drivers/i386/keyboard.cc -o drivers/keyboard.o
@@ -239,6 +242,12 @@ filesystem/mbr.o: filesystem/mbr.cc \
 		  filesystem/chs.h \
 		  lib/std/stdio.h
 	gcc $(CFLAGS) -c filesystem/mbr.cc -o filesystem/mbr.o
+filesystem/pipe.o: filesystem/pipe.cc \
+		   filesystem/pipe.h \
+                   arch/i386/memory/paging.h \
+                   lib/std/memory.h \
+                   proc/process.h
+	gcc $(CFLAGS) -c filesystem/pipe.cc -o filesystem/pipe.o
 io/keyboard.o: io/keyboard.cc \
 	       io/keyboard.h \
 	       lib/std/memory.h \
@@ -301,6 +310,7 @@ proc/close.o: proc/close.cc \
 	      proc/close.h \
 	      arch/i386/memory/paging.h \
 	      filesystem/file.h \
+	      filesystem/pipe.h \
 	      lib/std/memory.h \
 	      proc/process.h
 	gcc $(CFLAGS) -c proc/close.cc -o proc/close.o
@@ -319,6 +329,7 @@ proc/fork.o: proc/fork.cc \
 	     arch/i386/memory/gdt.h \
 	     arch/i386/memory/paging.h \
 	     filesystem/file.h \
+	     filesystem/pipe.h \
 	     lib/std/memory.h \
 	     lib/std/string.h \
 	     proc/process.h
@@ -338,6 +349,7 @@ proc/open.o: proc/open.cc \
 	     arch/i386/memory/paging.h \
 	     filesystem/fat32.h \
 	     filesystem/file.h \
+	     filesystem/pipe.h \
 	     lib/std/memory.h \
 	     lib/std/string.h \
 	     proc/process.h
@@ -363,6 +375,7 @@ proc/read_write.o: proc/read_write.cc \
 		   arch/i386/memory/paging.h \
 		   filesystem/fat32.h \
 		   filesystem/file.h \
+		   filesystem/pipe.h \
 		   io/keyboard.h \
 		   lib/std/memory.h \
 		   lib/std/stdio.h \
@@ -435,6 +448,7 @@ clean:
 	filesystem/fat32.o \
 	filesystem/file.o \
 	filesystem/mbr.o \
+	filesystem/pipe.o \
 	io/keyboard.o \
 	io/io.o \
 	io/vga.o \

@@ -15,11 +15,14 @@ struct file_mapping {
   struct file_mapping *prev;
 };
 
+struct pipe;
+
 struct file {
   uint32_t file_descriptor;
   char can_free;
   char *path;
   char *buffer;
+  struct filesystem::pipe *read_write_pipe;
   uint32_t inode; // Actually just cluster num
   uint32_t size;
   uint32_t offset;

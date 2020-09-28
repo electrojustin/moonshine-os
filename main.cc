@@ -141,6 +141,7 @@ void kernel_main(multiboot_info_t *multiboot_info, unsigned int magic) {
   proc::register_syscall(0x14, proc::getpid);
   proc::register_syscall(0x21, proc::access);
   proc::register_syscall(0x27, proc::mkdir);
+  proc::register_syscall(0x2A, proc::pipe);
   proc::register_syscall(0x2D, proc::brk);
   proc::register_syscall(0x36, proc::ioctl);
   proc::register_syscall(0x55, proc::readlink);

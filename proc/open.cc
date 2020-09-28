@@ -2,6 +2,7 @@
 #include "arch/i386/memory/paging.h"
 #include "filesystem/fat32.h"
 #include "filesystem/file.h"
+#include "filesystem/pipe.h"
 #include "lib/std/memory.h"
 #include "lib/std/stdio.h"
 #include "lib/std/string.h"
@@ -12,12 +13,16 @@ namespace proc {
 namespace {
 
 using arch::memory::make_virtual_string_copy;
+using arch::memory::physical_to_virtual_memcpy;
 using filesystem::directory_entry;
 using filesystem::load_file;
+using filesystem::pipe;
+using filesystem::PIPE_MAX_SIZE;
 using filesystem::stat_fat32;
 using lib::std::kfree;
 using lib::std::kmalloc;
 using lib::std::make_string_copy;
+using lib::std::memset;
 using lib::std::strcat;
 using lib::std::strlen;
 using lib::std::substring;
@@ -138,6 +143,57 @@ uint32_t access(uint32_t path_addr, uint32_t mode, uint32_t reserved1,
 
   kfree(path);
   kfree(dir_entry.name);
+  return 0;
+}
+
+uint32_t pipe(uint32_t fd_addr, uint32_t flags, uint32_t reserved1,
+              uint32_t reserved2, uint32_t reserved3, uint32_t reserved4) {
+  struct process *current_process = get_currently_executing_process();
+  uint32_t *page_dir = current_process->page_dir;
+
+  struct pipe *new_pipe = (struct pipe *)kmalloc(sizeof(struct pipe));
+  memset((char *)new_pipe->buf, PIPE_MAX_SIZE, 0);
+  new_pipe->read_index = 0;
+  new_pipe->write_index = 0;
+  new_pipe->read_wait = nullptr;
+  new_pipe->write_wait = nullptr;
+  new_pipe->num_references = 2;
+
+  struct file *new_file1 = (struct file *)kmalloc(sizeof(struct file));
+  new_file1->file_descriptor = current_process->next_file_descriptor;
+  current_process->next_file_descriptor++;
+  new_file1->read_write_pipe = new_pipe;
+  new_file1->mappings = nullptr;
+  new_file1->path = nullptr;
+  new_file1->buffer = nullptr;
+
+  struct file *new_file2 = (struct file *)kmalloc(sizeof(struct file));
+  new_file2->file_descriptor = current_process->next_file_descriptor;
+  current_process->next_file_descriptor++;
+  new_file2->read_write_pipe = new_pipe;
+  new_file2->mappings = nullptr;
+  new_file2->path = nullptr;
+  new_file2->buffer = nullptr;
+
+  new_file2->prev = new_file1;
+  new_file1->prev = nullptr;
+  new_file1->next = new_file2;
+
+  if (!current_process->open_files) {
+    current_process->open_files = new_file1;
+    new_file2->next = nullptr;
+  } else {
+    new_file2->next = current_process->open_files;
+    new_file2->next->prev = new_file2;
+    current_process->open_files = new_file1;
+  }
+
+  physical_to_virtual_memcpy(page_dir, (char *)&new_file1->file_descriptor,
+                             (char *)fd_addr, sizeof(uint32_t));
+  physical_to_virtual_memcpy(page_dir, (char *)&new_file2->file_descriptor,
+                             (char *)fd_addr + sizeof(uint32_t),
+                             sizeof(uint32_t));
+
   return 0;
 }
 

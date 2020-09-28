@@ -4,6 +4,7 @@
 #include "arch/i386/memory/gdt.h"
 #include "arch/i386/memory/paging.h"
 #include "filesystem/file.h"
+#include "filesystem/pipe.h"
 #include "lib/std/memory.h"
 #include "lib/std/stdio.h"
 #include "lib/std/string.h"
@@ -15,6 +16,7 @@ namespace proc {
 namespace {
 
 using arch::cpu::is_sse_enabled;
+using arch::memory::copy_mapping;
 using arch::memory::flush_pages;
 using arch::memory::map_memory_segment;
 using arch::memory::PAGE_SIZE;
@@ -25,6 +27,7 @@ using arch::memory::user_read_write;
 using arch::memory::virtual_to_physical;
 using filesystem::file;
 using filesystem::file_mapping;
+using filesystem::pipe;
 using lib::std::kmalloc;
 using lib::std::kmalloc_aligned;
 using lib::std::make_string_copy;
@@ -59,6 +62,17 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
   new_proc->num_page_tables = 0;
 
   new_proc->entry = parent_proc->entry;
+
+  struct file *current_file = parent_proc->open_files;
+  while (current_file) {
+    struct file_mapping *mapping = current_file->mappings;
+    while (mapping) {
+      map_memory_segment(new_proc, 0, (uint32_t)mapping->mapping,
+                         mapping->mapping_len, user_read_write);
+      mapping = mapping->next;
+    }
+    current_file = current_file->next;
+  }
 
   new_proc->num_segments = parent_proc->num_segments;
   new_proc->segments = (struct process_memory_segment *)kmalloc(
@@ -100,6 +114,7 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
 
   new_proc->actual_brk = parent_proc->actual_brk;
   new_proc->brk = parent_proc->brk;
+  new_proc->lower_brk = parent_proc->lower_brk;
 
   new_proc->argc = parent_proc->argc;
   new_proc->argv = (char **)kmalloc(new_proc->argc * sizeof(char *));
@@ -108,18 +123,44 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
   }
 
   new_proc->next_file_descriptor = parent_proc->next_file_descriptor;
-  struct file *current_file = parent_proc->open_files;
+  current_file = parent_proc->open_files;
   new_proc->open_files = nullptr;
   while (current_file) {
-    struct file_mapping *current_mapping = current_file->mappings;
-    while (current_mapping) {
-      flush_pages(parent_proc->page_dir, current_file, current_mapping);
-      current_mapping = current_mapping->next;
+    if (current_file->read_write_pipe) {
+      current_file->read_write_pipe->num_references += 2;
     }
+
     struct file *new_file = (struct file *)kmalloc(sizeof(struct file));
     memcpy((char *)current_file, (char *)new_file, sizeof(struct file));
     new_file->path = make_string_copy(new_file->path);
     insert_file(new_proc, new_file);
+
+    new_file->mappings = nullptr;
+    struct file_mapping *current_mapping = current_file->mappings;
+    struct file_mapping *current_new_mapping = nullptr;
+    while (current_mapping) {
+      struct file_mapping *new_mapping =
+          (struct file_mapping *)kmalloc(sizeof(struct file_mapping));
+      new_mapping->mapping = current_mapping->mapping;
+      new_mapping->mapping_len = current_mapping->mapping_len;
+      new_mapping->offset = current_mapping->offset;
+      new_mapping->is_private = current_mapping->is_private;
+      new_mapping->next = nullptr;
+      new_mapping->prev = current_new_mapping;
+
+      copy_mapping(parent_proc, new_proc, new_mapping);
+
+      if (!new_file->mappings) {
+        new_file->mappings = new_mapping;
+      } else {
+        current_new_mapping->next = new_mapping;
+      }
+
+      current_new_mapping = new_mapping;
+
+      current_mapping = current_mapping->next;
+    }
+
     current_file = current_file->next;
   }
 

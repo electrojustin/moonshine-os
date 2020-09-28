@@ -27,6 +27,8 @@ void load_file(struct file *file) {
 
   file->can_free = 0;
 
+  file->read_write_pipe = nullptr;
+
   if (file_stats.name) {
     kfree(file_stats.name);
     file->inode = file_stats.inode;

@@ -1,5 +1,7 @@
 #include "proc/close.h"
 #include "arch/i386/memory/paging.h"
+#include "filesystem/file.h"
+#include "filesystem/pipe.h"
 #include "lib/std/memory.h"
 #include "lib/std/stdio.h"
 #include "proc/process.h"
@@ -11,34 +13,42 @@ namespace {
 using arch::memory::flush_pages;
 using filesystem::file;
 using filesystem::file_mapping;
+using filesystem::pipe;
 using lib::std::kfree;
 
 } // namespace
 
 void close_file(struct process *current_process, struct file *to_close) {
-  struct file_mapping *mapping = to_close->mappings;
-  while (mapping) {
-    struct file_mapping *next = mapping->next;
-    flush_pages(current_process->page_dir, to_close, mapping);
-    kfree(mapping);
-    mapping = next;
-  }
-
-  kfree(to_close->path);
-  if (to_close->buffer) {
-    kfree(to_close->buffer);
-  }
-
-  if (!to_close->next && !to_close->prev) {
-    current_process->open_files = nullptr;
-  } else if (!to_close->prev) {
-    current_process->open_files = to_close->next;
-    to_close->next->prev = nullptr;
-  } else if (!to_close->next) {
-    to_close->prev->next = nullptr;
+  if (to_close->read_write_pipe) {
+    to_close->read_write_pipe->num_references--;
+    if (!to_close->read_write_pipe->num_references) {
+      kfree(to_close->read_write_pipe);
+    }
   } else {
-    to_close->prev->next = to_close->next;
-    to_close->next->prev = to_close->prev;
+    struct file_mapping *mapping = to_close->mappings;
+    while (mapping) {
+      struct file_mapping *next = mapping->next;
+      flush_pages(current_process->page_dir, to_close, mapping);
+      kfree(mapping);
+      mapping = next;
+    }
+
+    kfree(to_close->path);
+    if (to_close->buffer) {
+      kfree(to_close->buffer);
+    }
+
+    if (!to_close->next && !to_close->prev) {
+      current_process->open_files = nullptr;
+    } else if (!to_close->prev) {
+      current_process->open_files = to_close->next;
+      to_close->next->prev = nullptr;
+    } else if (!to_close->next) {
+      to_close->prev->next = nullptr;
+    } else {
+      to_close->prev->next = to_close->next;
+      to_close->next->prev = to_close->prev;
+    }
   }
 
   kfree(to_close);
