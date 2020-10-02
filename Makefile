@@ -1,6 +1,9 @@
 CFLAGS="-m32" "-ffreestanding" "-mno-red-zone" "-fno-exceptions" "-fno-rtti" "-nostdlib" "-I$(shell pwd)"
 USERSPACE_CFLAGS="-m32"
-all: moonshine.bin
+all: directories moonshine.bin
+directories:
+	mkdir -p arch/cpu &> /dev/null
+	mkdir -p arch/memory &> /dev/null
 moonshine.bin: boot.o \
 	       main.o \
 	       arch/cpu/model_specific.o \
