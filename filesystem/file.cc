@@ -23,11 +23,9 @@ void load_file(struct file *file) {
   struct directory_entry file_stats = stat_fat32(file->path);
   file->size = file_stats.size;
 
-  file->mappings = nullptr;
-
-  file->can_free = 0;
-
   file->read_write_pipe = nullptr;
+
+  file->num_references = 1;
 
   if (file_stats.name) {
     kfree(file_stats.name);
@@ -80,6 +78,20 @@ void load_file(struct file *file) {
   } else {
     file->buffer = nullptr;
   }
+}
+
+struct file_descriptor *
+find_file_descriptor(uint32_t descriptor_num,
+                     struct file_descriptor *descriptor) {
+  struct file_descriptor *current_descriptor = descriptor;
+  while (current_descriptor) {
+    if (current_descriptor->num == descriptor_num) {
+      return current_descriptor;
+    }
+    current_descriptor = current_descriptor->next;
+  }
+
+  return nullptr;
 }
 
 } // namespace filesystem

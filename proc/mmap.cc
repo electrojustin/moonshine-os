@@ -33,32 +33,27 @@ uint32_t msync_internal(uint32_t req_addr, uint32_t len, uint32_t flags,
   struct process *current_process = get_currently_executing_process();
   uint32_t *page_dir = current_process->page_dir;
 
-  struct file *to_sync = current_process->open_files;
-  struct file_mapping *current_mapping = nullptr;
-  while (to_sync) {
-    current_mapping = to_sync->mappings;
-    while (current_mapping && (uint32_t)current_mapping->mapping != req_addr) {
-      current_mapping = current_mapping->next;
-    }
-
-    if (current_mapping) {
+  struct file_mapping *current_mapping = current_process->mappings;
+  while (current_mapping) {
+    if ((uint32_t)current_mapping->mapping == req_addr) {
       break;
     }
-
-    to_sync = to_sync->next;
+    current_mapping = current_mapping->next;
   }
 
-  if (!to_sync) {
+  if (!current_mapping) {
     return -1;
   }
 
-  flush_pages(page_dir, to_sync, current_mapping);
+  struct file *to_sync = current_mapping->file;
+
+  flush_pages(page_dir, current_mapping);
 
   if (should_delete_mapping) {
     if (current_mapping->prev) {
       current_mapping->prev->next = current_mapping->next;
     } else {
-      to_sync->mappings = current_mapping->next;
+      current_process->mappings = current_mapping->next;
     }
 
     if (current_mapping->next) {
@@ -67,8 +62,10 @@ uint32_t msync_internal(uint32_t req_addr, uint32_t len, uint32_t flags,
 
     kfree(current_mapping);
 
-    if (!to_sync->mappings && to_sync->can_free) {
-      close_file(current_process, to_sync);
+    to_sync->num_references--;
+
+    if (to_sync->num_references == 0) {
+      close_file(to_sync);
     }
   }
 
@@ -92,22 +89,18 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
   }
 
   if (!file_descriptor || flags & MAP_ANONYMOUS) {
-    struct file *to_flush = current_process->open_files;
-    while (to_flush) {
-      struct file_mapping *mapping = to_flush->mappings;
-      while (mapping) {
-        if ((uint32_t)mapping->mapping <= req_addr &&
-            (uint32_t)mapping->mapping + mapping->mapping_len > req_addr) {
-          void *stop_addr =
-              (uint32_t)mapping->mapping + mapping->mapping_len < req_addr + len
-                  ? mapping->mapping + mapping->mapping_len
-                  : (void *)req_addr + len;
-          flush_pages(current_process->page_dir, to_flush, mapping,
-                      (void *)req_addr, stop_addr);
-        }
-        mapping = mapping->next;
+    struct file_mapping *mapping = current_process->mappings;
+    while (mapping) {
+      if ((uint32_t)mapping->mapping <= req_addr &&
+          (uint32_t)mapping->mapping + mapping->mapping_len > req_addr) {
+        void *stop_addr =
+            (uint32_t)mapping->mapping + mapping->mapping_len < req_addr + len
+                ? mapping->mapping + mapping->mapping_len
+                : (void *)req_addr + len;
+        flush_pages(current_process->page_dir, mapping, (void *)req_addr,
+                    stop_addr);
       }
-      to_flush = to_flush->next;
+      mapping = mapping->next;
     }
 
     current_process->num_segments++;
@@ -134,10 +127,8 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
 
     return req_addr;
   } else {
-    struct file *to_map = current_process->open_files;
-    while (to_map && to_map->file_descriptor != file_descriptor) {
-      to_map = to_map->next;
-    }
+    struct file_descriptor *to_map =
+        find_file_descriptor(file_descriptor, current_process->open_files);
 
     if (!to_map) {
       return -1;
@@ -147,7 +138,10 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
 
     struct file_mapping *new_mapping =
         (struct file_mapping *)kmalloc(sizeof(struct file_mapping));
-    new_mapping->next = to_map->mappings;
+    new_mapping->next = current_process->mappings;
+    if (current_process->mappings) {
+      current_process->mappings->prev = new_mapping;
+    }
     new_mapping->prev = nullptr;
     new_mapping->mapping = (void *)req_addr;
     new_mapping->mapping_len = len;
@@ -156,7 +150,9 @@ uint32_t mmap(uint32_t req_addr, uint32_t len, uint32_t prot, uint32_t flags,
     if (flags & MAP_SHARED) {
       new_mapping->is_private = 0;
     }
-    to_map->mappings = new_mapping;
+    current_process->mappings = new_mapping;
+    new_mapping->file = to_map->file;
+    to_map->file->num_references++;
 
     return req_addr;
   }

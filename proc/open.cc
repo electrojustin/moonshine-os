@@ -15,6 +15,8 @@ namespace {
 using arch::memory::make_virtual_string_copy;
 using arch::memory::physical_to_virtual_memcpy;
 using filesystem::directory_entry;
+using filesystem::file;
+using filesystem::file_descriptor;
 using filesystem::load_file;
 using filesystem::pipe;
 using filesystem::PIPE_MAX_SIZE;
@@ -31,43 +33,58 @@ constexpr uint32_t AT_FDCWD =
     (~100) +
     1; // This is supposed to be -100 signed but we assume unsigned ints :\
 
+constexpr uint32_t O_CREAT = 0x200;
+
 uint32_t open_internal(struct process *current_process, char *path,
                        uint32_t flags, uint32_t mode) {
-  int parent_path_index = strlen(path);
-  while (parent_path_index && path[parent_path_index] != '/') {
-    parent_path_index--;
-  }
-  if (parent_path_index > 1) {
-    char *parent_path = substring(path, 0, parent_path_index);
-    struct directory_entry entry = stat_fat32(parent_path);
-    kfree(parent_path);
+  if (!(flags & O_CREAT)) {
+    struct directory_entry entry = stat_fat32(path);
     if (!entry.name) {
-      return -1;
+      return -2;
     }
     kfree(entry.name);
+    if (path[1] == 'e') {
+      while (1)
+        ;
+    }
+  } else {
+    int parent_path_index = strlen(path);
+    while (parent_path_index && path[parent_path_index] != '/') {
+      parent_path_index--;
+    }
+    if (parent_path_index > 1) {
+      char *parent_path = substring(path, 0, parent_path_index);
+      struct directory_entry entry = stat_fat32(parent_path);
+      kfree(parent_path);
+      if (!entry.name) {
+        return -2;
+      }
+      kfree(entry.name);
+    }
   }
 
   struct file *new_file = (struct file *)kmalloc(sizeof(struct file));
-  new_file->file_descriptor = current_process->next_file_descriptor;
-  current_process->next_file_descriptor++;
   new_file->path = make_string_copy(path);
+
+  struct file_descriptor *new_fd =
+      (struct file_descriptor *)kmalloc(sizeof(struct file_descriptor));
+  new_fd->file = new_file;
+  new_fd->num = current_process->next_file_descriptor;
+  current_process->next_file_descriptor++;
+  new_fd->prev = nullptr;
   if (!current_process->open_files) {
-    current_process->open_files = new_file;
-    new_file->prev = nullptr;
-    new_file->next = nullptr;
+    current_process->open_files = new_fd;
+    new_fd->next = nullptr;
   } else {
-    struct file *current_file = current_process->open_files;
-    while (current_file->next) {
-      current_file = current_file->next;
-    }
-    current_file->next = new_file;
-    new_file->prev = current_file;
-    new_file->next = nullptr;
+    new_fd->prev = nullptr;
+    new_fd->next = current_process->open_files;
+    new_fd->next->prev = new_fd;
+    current_process->open_files = new_fd;
   }
 
   load_file(new_file);
 
-  return new_file->file_descriptor;
+  return new_fd->num;
 }
 
 } // namespace
@@ -109,17 +126,15 @@ uint32_t openat(uint32_t directory_fd, uint32_t path_addr, uint32_t flags,
     return ret;
   }
 
-  struct file *current_file = current_process->open_files;
-  while (current_file && current_file->file_descriptor != directory_fd) {
-    current_file = current_file->next;
-  }
+  struct file_descriptor *current_fd =
+      find_file_descriptor(directory_fd, current_process->open_files);
 
-  if (!current_file) {
+  if (!current_fd) {
     kfree(relative_path);
     return -1;
   }
 
-  char *tmp = strcat(current_file->path, "/");
+  char *tmp = strcat(current_fd->file->path, "/");
   char *tmp2 = strcat(tmp, relative_path);
   uint32_t return_val = open_internal(current_process, tmp2, flags, mode);
   kfree(tmp);
@@ -138,7 +153,7 @@ uint32_t access(uint32_t path_addr, uint32_t mode, uint32_t reserved1,
 
   if (!dir_entry.name) {
     kfree(path);
-    return -1;
+    return -2;
   }
 
   kfree(path);
@@ -160,37 +175,45 @@ uint32_t pipe(uint32_t fd_addr, uint32_t flags, uint32_t reserved1,
   new_pipe->num_references = 2;
 
   struct file *new_file1 = (struct file *)kmalloc(sizeof(struct file));
-  new_file1->file_descriptor = current_process->next_file_descriptor;
-  current_process->next_file_descriptor++;
   new_file1->read_write_pipe = new_pipe;
-  new_file1->mappings = nullptr;
   new_file1->path = nullptr;
   new_file1->buffer = nullptr;
+  new_file1->num_references = 1;
+
+  struct file_descriptor *new_fd1 =
+      (struct file_descriptor *)kmalloc(sizeof(struct file_descriptor));
+  new_fd1->num = current_process->next_file_descriptor;
+  current_process->next_file_descriptor++;
+  new_fd1->file = new_file1;
 
   struct file *new_file2 = (struct file *)kmalloc(sizeof(struct file));
-  new_file2->file_descriptor = current_process->next_file_descriptor;
-  current_process->next_file_descriptor++;
   new_file2->read_write_pipe = new_pipe;
-  new_file2->mappings = nullptr;
   new_file2->path = nullptr;
   new_file2->buffer = nullptr;
+  new_file2->num_references = 1;
 
-  new_file2->prev = new_file1;
-  new_file1->prev = nullptr;
-  new_file1->next = new_file2;
+  struct file_descriptor *new_fd2 =
+      (struct file_descriptor *)kmalloc(sizeof(struct file_descriptor));
+  new_fd2->num = current_process->next_file_descriptor;
+  current_process->next_file_descriptor++;
+  new_fd2->file = new_file2;
+
+  new_fd2->prev = new_fd1;
+  new_fd1->prev = nullptr;
+  new_fd1->next = new_fd2;
 
   if (!current_process->open_files) {
-    current_process->open_files = new_file1;
-    new_file2->next = nullptr;
+    current_process->open_files = new_fd1;
+    new_fd2->next = nullptr;
   } else {
-    new_file2->next = current_process->open_files;
-    new_file2->next->prev = new_file2;
-    current_process->open_files = new_file1;
+    new_fd2->next = current_process->open_files;
+    new_fd2->next->prev = new_fd2;
+    current_process->open_files = new_fd1;
   }
 
-  physical_to_virtual_memcpy(page_dir, (char *)&new_file1->file_descriptor,
-                             (char *)fd_addr, sizeof(uint32_t));
-  physical_to_virtual_memcpy(page_dir, (char *)&new_file2->file_descriptor,
+  physical_to_virtual_memcpy(page_dir, (char *)&new_fd1->num, (char *)fd_addr,
+                             sizeof(uint32_t));
+  physical_to_virtual_memcpy(page_dir, (char *)&new_fd2->num,
                              (char *)fd_addr + sizeof(uint32_t),
                              sizeof(uint32_t));
 

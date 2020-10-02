@@ -13,6 +13,7 @@ namespace proc {
 namespace {
 
 using filesystem::directory_entry;
+using filesystem::file_descriptor;
 using filesystem::read_fat32;
 using filesystem::stat_fat32;
 using lib::std::kfree;
@@ -152,7 +153,12 @@ struct segment_list create_process_segments(uint8_t *file_buf,
 
 } // namespace
 
-char load_elf(char *path, int argc, char **argv, char *working_dir) {
+char load_elf(char *path, int argc, char **argv, char *working_dir,
+              struct file_descriptor *standard_in,
+              struct file_descriptor *standard_out,
+              struct file_descriptor *standard_error,
+              struct file_descriptor *open_files,
+              uint32_t next_file_descriptor) {
   uint8_t *file_buf = load_elf_from_disk(path);
   if (!file_buf) {
     return 0;
@@ -195,9 +201,10 @@ char load_elf(char *path, int argc, char **argv, char *working_dir) {
   }
 
   // Spawn the process
-  char ret =
-      spawn_new_process(path, argc, argv, segments.segments,
-                        segments.num_segments, (void (*)())entry, working_dir);
+  char ret = spawn_new_process(
+      path, argc, argv, segments.segments, segments.num_segments,
+      (void (*)())entry, working_dir, standard_in, standard_out, standard_error,
+      open_files, next_file_descriptor);
 
   kfree(segments.segments);
   kfree(file_buf);

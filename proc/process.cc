@@ -10,6 +10,7 @@
 #include "lib/std/stdio.h"
 #include "lib/std/string.h"
 #include "proc/close.h"
+#include "proc/mmap.h"
 #include "proc/process.h"
 #include "proc/syscall.h"
 
@@ -51,6 +52,10 @@ constexpr uint32_t AT_RANDOM = 25;
 constexpr uint64_t STACK_CANARY = 0xDEADBEEFDEADBEEF;
 
 void cleanup_process(struct process *to_cleanup) {
+  while (to_cleanup->mappings) {
+    munmap((uint32_t)to_cleanup->mappings->mapping, 0, 0, 0, 0, 0);
+  }
+
   for (int i = 0; i < to_cleanup->num_segments; i++) {
     kfree(to_cleanup->segments[i].actual_address);
     if (to_cleanup->segments[i].virtual_address) {
@@ -59,11 +64,22 @@ void cleanup_process(struct process *to_cleanup) {
     }
   }
   kfree(to_cleanup->segments);
-  struct file *current_file = to_cleanup->open_files;
+
+  struct file_descriptor *current_file = to_cleanup->open_files;
   while (current_file) {
-    close_file(to_cleanup, current_file);
+    close_file_descriptor(current_file);
     current_file = to_cleanup->open_files;
   }
+  if (to_cleanup->standard_in) {
+    close_file_descriptor(to_cleanup->standard_in);
+  }
+  if (to_cleanup->standard_out) {
+    close_file_descriptor(to_cleanup->standard_out);
+  }
+  if (to_cleanup->standard_error) {
+    close_file_descriptor(to_cleanup->standard_error);
+  }
+
   for (int i = 0; i < to_cleanup->num_page_tables; i++) {
     kfree(to_cleanup->page_tables[i]);
   }
@@ -81,6 +97,10 @@ void cleanup_process(struct process *to_cleanup) {
 
   kfree(to_cleanup->path);
   kfree(to_cleanup->working_dir);
+
+  if (to_cleanup->wait) {
+    kfree(to_cleanup->wait);
+  }
 
   if (to_cleanup->next == to_cleanup) {
     process_list = nullptr;
@@ -219,7 +239,11 @@ uint32_t next_pid = 1;
 char spawn_new_process(char *path, int argc, char **argv,
                        struct process_memory_segment *segments,
                        uint32_t num_segments, void (*entry_address)(void),
-                       char *working_dir) {
+                       char *working_dir, struct file_descriptor *standard_in,
+                       struct file_descriptor *standard_out,
+                       struct file_descriptor *standard_error,
+                       struct file_descriptor *open_files,
+                       uint32_t next_file_descriptor) {
   disable_interrupts();
 
   // Check to make sure we aren't allocating kernel memory
@@ -367,8 +391,14 @@ char spawn_new_process(char *path, int argc, char **argv,
   }
 
   // Initialize the file descriptors
-  new_proc->open_files = nullptr;
-  new_proc->next_file_descriptor = 3; // STDOUT and STDIN are 0 and 1
+  new_proc->standard_in = standard_in;
+  new_proc->standard_out = standard_out;
+  new_proc->standard_error = standard_error;
+  new_proc->open_files = open_files;
+  new_proc->next_file_descriptor = next_file_descriptor;
+
+  // Initialize memory mappings
+  new_proc->mappings = nullptr;
 
   // Set process as runnable
   new_proc->process_state = NEW;
@@ -400,8 +430,9 @@ void __attribute__((naked)) execute_processes(void) {
 
   while (process_list) {
     if (process_list->process_state == STOPPED) {
-      process_list = process_list->next;
-      cleanup_process(process_list->prev);
+      struct process *next_process = process_list->next;
+      cleanup_process(next_process->prev);
+      process_list = next_process;
     } else if (process_list->process_state == RUNNABLE) {
       uint32_t esp = process_list->esp;
       uint32_t kernel_esp = process_list->kernel_stack_top;

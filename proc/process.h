@@ -12,7 +12,8 @@ namespace proc {
 namespace {
 
 using arch::memory::tls_segment;
-using filesystem::file;
+using filesystem::file_descriptor;
+using filesystem::file_mapping;
 
 } // namespace
 
@@ -67,8 +68,13 @@ struct process {
   int argc;
   char **argv;
 
-  struct file *open_files = nullptr;
-  uint32_t next_file_descriptor = 2;
+  struct file_mapping *mappings = nullptr;
+
+  struct file_descriptor *standard_in = nullptr;
+  struct file_descriptor *standard_out = nullptr;
+  struct file_descriptor *standard_error = nullptr;
+  struct file_descriptor *open_files = nullptr;
+  uint32_t next_file_descriptor = 3;
 
   enum state process_state;
 
@@ -85,7 +91,12 @@ constexpr uint32_t DEFAULT_STACK_SIZE = 0x10000;
 char spawn_new_process(char *path, int argc, char **argv,
                        struct process_memory_segment *segments,
                        uint32_t num_segments, void (*entry_address)(void),
-                       char *working_dir = "/");
+                       char *working_dir = "/",
+                       struct file_descriptor *standard_in = nullptr,
+                       struct file_descriptor *standard_out = nullptr,
+                       struct file_descriptor *standard_error = nullptr,
+                       struct file_descriptor *open_files = nullptr,
+                       uint32_t next_file_descriptor = 3);
 
 void execute_processes(void);
 

@@ -1,6 +1,8 @@
 #include <stdint.h>
 
 #include "arch/i386/memory/paging.h"
+#include "filesystem/file.h"
+#include "filesystem/pipe.h"
 #include "lib/std/memory.h"
 #include "lib/std/stdio.h"
 #include "lib/std/string.h"
@@ -14,6 +16,8 @@ namespace {
 
 using arch::memory::make_virtual_string_copy;
 using arch::memory::virtual_to_physical;
+using filesystem::file;
+using filesystem::pipe;
 using lib::std::kfree;
 using lib::std::kmalloc;
 using lib::std::make_string_copy;
@@ -45,16 +49,29 @@ uint32_t execve(uint32_t path_addr, uint32_t argv_addr, uint32_t env_addr,
   }
   char **argv = (char **)kmalloc((argc + 1) * sizeof(char *));
   current_argv_addr = argv_addr;
-  for (int i = 0; i < argc; i++) {
+  for (int i = 1; i < argc; i++) {
     char *current_argv =
         *(char **)virtual_to_physical(page_dir, (void *)current_argv_addr);
     argv[i] = make_virtual_string_copy(page_dir, current_argv);
     current_argv_addr += sizeof(char *);
   }
+  argv[0] = make_string_copy(relative_path);
   argv[argc] = nullptr;
 
-  if (!load_elf(relative_path, argc, argv,
-                make_string_copy(current_process->working_dir))) {
+  struct file_descriptor *standard_in = current_process->standard_in;
+  struct file_descriptor *standard_out = current_process->standard_out;
+  struct file_descriptor *standard_error = current_process->standard_error;
+  struct file_descriptor *open_files = current_process->open_files;
+  uint32_t next_file_descriptor = current_process->next_file_descriptor;
+
+  current_process->standard_in = nullptr;
+  current_process->standard_out = nullptr;
+  current_process->standard_error = nullptr;
+  current_process->open_files = nullptr;
+
+  if (!load_elf(relative_path, argc, argv, current_process->working_dir,
+                standard_in, standard_out, standard_error, open_files,
+                next_file_descriptor)) {
     return -1;
   }
 

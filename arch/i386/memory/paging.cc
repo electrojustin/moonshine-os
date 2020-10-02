@@ -241,37 +241,38 @@ void virtual_to_virtual_memcpy(uint32_t *src_page_dir, uint32_t *dest_page_dir,
 }
 
 char *make_virtual_string_copy(uint32_t *page_dir, char *virtual_string) {
-  set_page_directory(page_dir);
-  uint32_t len = strlen(virtual_string) + 1;
-  set_page_directory(base_page_directory);
+  uint32_t len = 0;
+  while (1) {
+    char *next_char_pointer =
+        (char *)virtual_to_physical(page_dir, virtual_string + len);
+    if (!next_char_pointer) {
+      return nullptr;
+    } else if (!*next_char_pointer) {
+      break;
+    }
+    len++;
+  }
+  len++;
   char *ret = (char *)kmalloc(len);
   virtual_to_physical_memcpy(page_dir, virtual_string, ret, len);
   return ret;
 }
 
 char swap_in_page(struct process *proc, void *virtual_addr) {
-  struct file *current_file = proc->open_files;
-  struct file_mapping *current_mapping = nullptr;
+  struct file_mapping *current_mapping = proc->mappings;
 
-  while (current_file) {
-    current_mapping = current_file->mappings;
-    while (current_mapping &&
-           !(current_mapping->mapping <= virtual_addr &&
-             current_mapping->mapping + current_mapping->mapping_len >
-                 virtual_addr)) {
-      current_mapping = current_mapping->next;
-    }
-
-    if (current_mapping) {
-      break;
-    }
-
-    current_file = current_file->next;
+  while (current_mapping &&
+         !(current_mapping->mapping <= virtual_addr &&
+           current_mapping->mapping + current_mapping->mapping_len >
+               virtual_addr)) {
+    current_mapping = current_mapping->next;
   }
 
-  if (!current_file || !current_file->inode) {
-    return 0; // Uh oh, either segfault or panic
+  if (!current_mapping) {
+    return 0; // Uh oh, either segfaul or panic
   }
+
+  struct file *current_file = current_mapping->file;
 
   void *actual_addr = kmalloc_aligned(PAGE_SIZE, PAGE_SIZE);
 
@@ -294,9 +295,9 @@ char swap_in_page(struct process *proc, void *virtual_addr) {
   return 1;
 }
 
-void flush_pages(uint32_t *page_dir, struct file *backing_file,
-                 struct file_mapping *mapping, void *start_addr,
-                 void *stop_addr) {
+void flush_pages(uint32_t *page_dir, struct file_mapping *mapping,
+                 void *start_addr, void *stop_addr) {
+  struct file *backing_file = mapping->file;
   void *current_addr = mapping->mapping;
   if (start_addr) {
     current_addr = start_addr;

@@ -24,6 +24,7 @@
 #include "proc/brk.h"
 #include "proc/close.h"
 #include "proc/dir.h"
+#include "proc/dup.h"
 #include "proc/elf_loader.h"
 #include "proc/execve.h"
 #include "proc/exit.h"
@@ -144,6 +145,7 @@ void kernel_main(multiboot_info_t *multiboot_info, unsigned int magic) {
   proc::register_syscall(0x2A, proc::pipe);
   proc::register_syscall(0x2D, proc::brk);
   proc::register_syscall(0x36, proc::ioctl);
+  proc::register_syscall(0x3F, proc::dup2);
   proc::register_syscall(0x55, proc::readlink);
   proc::register_syscall(0x5A, proc::mmap);
   proc::register_syscall(0x5B, proc::munmap);

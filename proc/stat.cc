@@ -17,6 +17,7 @@ using filesystem::ALL_RWX;
 using filesystem::CHAR_DEVICE;
 using filesystem::DIRECTORY;
 using filesystem::directory_entry;
+using filesystem::FIFO;
 using filesystem::file;
 using filesystem::REGULAR_FILE;
 using filesystem::stat_fat32;
@@ -63,17 +64,17 @@ uint32_t fstat64(uint32_t fd, uint32_t stat_addr, uint32_t reserved1,
   if (fd < 2) {
     dest_stat->mode = ((uint32_t)CHAR_DEVICE << 12) | ALL_RWX;
   } else {
-    struct file *current_file = current_process->open_files;
-    while (current_file && current_file->file_descriptor != fd) {
-      current_file = current_file->next;
-    }
+    struct file_descriptor *current_fd =
+        find_file_descriptor(fd, current_process->open_files);
 
-    if (!current_file) {
+    if (!current_fd) {
       kfree(dest_stat);
       return -1;
     }
 
-    if (!stat_internal(page_dir, current_file->path, dest_stat)) {
+    if (current_fd->file->read_write_pipe) {
+      dest_stat->mode = ((uint32_t)FIFO << 12) | ALL_RWX;
+    } else if (!stat_internal(page_dir, current_fd->file->path, dest_stat)) {
       kfree(dest_stat);
       return -1;
     }

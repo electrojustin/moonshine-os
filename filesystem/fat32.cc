@@ -343,11 +343,11 @@ struct directory_table_entry find_directory_entry(
       ret = dir_table[i];
       ret.reserved = 0;
       break;
-    } else if (eight_three_filename[0] != 'U' &&
-               dir_table[i].attributes == LONG_FILE_NAME) {
+    } else if (dir_table[i].attributes == LONG_FILE_NAME) {
       uint32_t num_entries =
           parse_long_filename((char *)&dir_table[i], &long_filename);
-      if (streq(long_filename, current_name, 13 * num_entries)) {
+      if (dir_table[i + num_entries].filename[0] != DELETED_DIR_ENTRY &&
+          streq(long_filename, current_name, 13 * num_entries)) {
         if (return_long_filenames) {
           ret = dir_table[i + num_entries];
           ret.reserved = 1; // TODO: this is hacky, find a proper solution

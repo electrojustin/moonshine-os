@@ -6,15 +6,13 @@
 
 int main(void) {
   int pipefd[2];
-  char buf;
 
   pipe(pipefd);
 
   if (!fork()) {
-    while (1) {
-      read(pipefd[0], &buf, 1);
-      printf("%c", buf);
-    }
+    dup2(pipefd[0], fileno(stdin));
+    char *argv[2] = {"test.exe", nullptr};
+    execve("test.exe", argv, nullptr);
   } else {
     while (1) {
       char *message = "Hello from child!\n";

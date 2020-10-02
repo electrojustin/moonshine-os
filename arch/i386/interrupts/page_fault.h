@@ -42,7 +42,6 @@ __attribute__((interrupt)) void page_fault(struct interrupt_frame *frame,
 
     if (!swap_in_page(current_process,
                       (void *)(page_fault_addr & (~(PAGE_SIZE - 1))))) {
-      lib::std::printk("%x\n", page_fault_addr);
       print_error((char *)"Segmentation Fault");
       kill_current_process();
     } else {

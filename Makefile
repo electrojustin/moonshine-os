@@ -32,6 +32,7 @@ moonshine.bin: boot.o \
 	       proc/brk.o \
 	       proc/close.o \
 	       proc/dir.o \
+	       proc/dup.o \
 	       proc/elf_loader.o \
 	       proc/execve.o \
 	       proc/exit.o \
@@ -81,6 +82,7 @@ moonshine.bin: boot.o \
 		      proc/brk.o \
 		      proc/close.o \
 		      proc/dir.o \
+		      proc/dup.o \
 		      proc/elf_loader.o \
 		      proc/execve.o \
 		      proc/exit.o \
@@ -124,6 +126,7 @@ main.o: main.cc \
 	     proc/brk.h \
 	     proc/close.h \
 	     proc/dir.h \
+	     proc/dup.h \
 	     proc/elf_loader.h \
 	     proc/execve.h \
 	     proc/exit.h \
@@ -293,6 +296,10 @@ proc/elf_loader.o: proc/elf_loader.cc \
 proc/execve.o: proc/execve.cc \
 	       proc/execve.h \
 	       arch/i386/memory/paging.h \
+               filesystem/file.h \
+               filesystem/pipe.h \
+               lib/std/memory.h \
+               lib/std/string.h \
 	       proc/elf_loader.h \
 	       proc/process.h
 	gcc $(CFLAGS) -c proc/execve.cc -o proc/execve.o
@@ -323,6 +330,13 @@ proc/dir.o: proc/dir.cc \
 	    proc/process.h \
 	    proc/read_write.h
 	gcc $(CFLAGS) -c proc/dir.cc -o proc/dir.o
+proc/dup.o: proc/dup.cc \
+	    proc/dup.h \
+	    filesystem/file.h \
+	    lib/std/memory.h \
+	    proc/close.h \
+	    proc/process.h
+	gcc $(CFLAGS) -c proc/dup.cc -o proc/dup.o
 proc/fork.o: proc/fork.cc \
 	     proc/fork.h \
 	     arch/i386/cpu/sse.h \
@@ -332,6 +346,7 @@ proc/fork.o: proc/fork.cc \
 	     filesystem/pipe.h \
 	     lib/std/memory.h \
 	     lib/std/string.h \
+	     proc/dup.h \
 	     proc/process.h
 	gcc $(CFLAGS) -c proc/fork.cc -o proc/fork.o
 proc/ioctl.o: proc/ioctl.cc \
@@ -342,6 +357,7 @@ proc/mmap.o: proc/mmap.cc \
 	     arch/i386/memory/paging.h \
 	     filesystem/file.h \
 	     lib/std/memory.h \
+	     proc/close.h \
 	     proc/process.h
 	gcc $(CFLAGS) -c proc/mmap.cc -o proc/mmap.o
 proc/open.o: proc/open.cc \
@@ -395,7 +411,13 @@ proc/sleep.o: proc/sleep.cc \
 	      proc/process.h
 	gcc $(CFLAGS) -c proc/sleep.cc -o proc/sleep.o
 proc/stat.o: proc/stat.cc \
-	     proc/stat.h
+	     proc/stat.h \
+	     arch/i386/memory/paging.h \
+	     filesystem/fat32.h \
+	     filesystem/file.h \
+	     lib/math.h \
+	     lib/std/memory.h \
+	     proc/process.h
 	gcc $(CFLAGS) -c proc/stat.cc -o proc/stat.o
 proc/syscall.o: proc/syscall.h \
 		proc/i386/syscall.cc \
@@ -460,6 +482,7 @@ clean:
 	proc/brk.o \
 	proc/close.o \
 	proc/dir.o \
+	proc/dup.o \
 	proc/elf_loader.o \
 	proc/execve.o \
 	proc/exit.o \

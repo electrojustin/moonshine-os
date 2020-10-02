@@ -8,6 +8,7 @@
 #include "lib/std/memory.h"
 #include "lib/std/stdio.h"
 #include "lib/std/string.h"
+#include "proc/dup.h"
 #include "proc/fork.h"
 #include "proc/process.h"
 
@@ -26,6 +27,7 @@ using arch::memory::user_read_only;
 using arch::memory::user_read_write;
 using arch::memory::virtual_to_physical;
 using filesystem::file;
+using filesystem::file_descriptor;
 using filesystem::file_mapping;
 using filesystem::pipe;
 using lib::std::kmalloc;
@@ -33,13 +35,6 @@ using lib::std::kmalloc_aligned;
 using lib::std::make_string_copy;
 using lib::std::memcpy;
 using lib::std::memset;
-
-void insert_file(struct process *proc, struct file *to_insert) {
-  to_insert->prev = nullptr;
-  to_insert->next = proc->open_files;
-
-  proc->open_files = to_insert;
-}
 
 } // namespace
 
@@ -63,15 +58,11 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
 
   new_proc->entry = parent_proc->entry;
 
-  struct file *current_file = parent_proc->open_files;
-  while (current_file) {
-    struct file_mapping *mapping = current_file->mappings;
-    while (mapping) {
-      map_memory_segment(new_proc, 0, (uint32_t)mapping->mapping,
-                         mapping->mapping_len, user_read_write);
-      mapping = mapping->next;
-    }
-    current_file = current_file->next;
+  struct file_mapping *mapping = parent_proc->mappings;
+  while (mapping) {
+    map_memory_segment(new_proc, 0, (uint32_t)mapping->mapping,
+                       mapping->mapping_len, user_read_write);
+    mapping = mapping->next;
   }
 
   new_proc->num_segments = parent_proc->num_segments;
@@ -122,46 +113,57 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
     new_proc->argv[i] = make_string_copy(parent_proc->argv[i]);
   }
 
+  struct file_mapping *current_mapping = parent_proc->mappings;
+  struct file_mapping *last_new_mapping = nullptr;
+  while (current_mapping) {
+    struct file_mapping *new_mapping =
+        (struct file_mapping *)kmalloc(sizeof(struct file_mapping));
+    *new_mapping = *current_mapping;
+    new_mapping->prev = last_new_mapping;
+    new_mapping->next = nullptr;
+    new_mapping->file->num_references++;
+
+    copy_mapping(parent_proc, new_proc, new_mapping);
+
+    if (!last_new_mapping) {
+      new_proc->mappings = new_mapping;
+    } else {
+      last_new_mapping->next = new_mapping;
+    }
+
+    last_new_mapping = new_mapping;
+
+    current_mapping = current_mapping->next;
+  }
+
   new_proc->next_file_descriptor = parent_proc->next_file_descriptor;
-  current_file = parent_proc->open_files;
+
+  struct file_descriptor *current_fd = parent_proc->open_files;
   new_proc->open_files = nullptr;
-  while (current_file) {
-    if (current_file->read_write_pipe) {
-      current_file->read_write_pipe->num_references += 2;
-    }
+  while (current_fd) {
+    struct file_descriptor *new_fd = duplicate(current_fd, current_fd->num);
 
-    struct file *new_file = (struct file *)kmalloc(sizeof(struct file));
-    memcpy((char *)current_file, (char *)new_file, sizeof(struct file));
-    new_file->path = make_string_copy(new_file->path);
-    insert_file(new_proc, new_file);
+    new_fd->prev = nullptr;
+    new_fd->next = new_proc->open_files;
+    new_proc->open_files = new_fd;
 
-    new_file->mappings = nullptr;
-    struct file_mapping *current_mapping = current_file->mappings;
-    struct file_mapping *current_new_mapping = nullptr;
-    while (current_mapping) {
-      struct file_mapping *new_mapping =
-          (struct file_mapping *)kmalloc(sizeof(struct file_mapping));
-      new_mapping->mapping = current_mapping->mapping;
-      new_mapping->mapping_len = current_mapping->mapping_len;
-      new_mapping->offset = current_mapping->offset;
-      new_mapping->is_private = current_mapping->is_private;
-      new_mapping->next = nullptr;
-      new_mapping->prev = current_new_mapping;
+    current_fd = current_fd->next;
+  }
 
-      copy_mapping(parent_proc, new_proc, new_mapping);
-
-      if (!new_file->mappings) {
-        new_file->mappings = new_mapping;
-      } else {
-        current_new_mapping->next = new_mapping;
-      }
-
-      current_new_mapping = new_mapping;
-
-      current_mapping = current_mapping->next;
-    }
-
-    current_file = current_file->next;
+  if (parent_proc->standard_in) {
+    new_proc->standard_in = duplicate(parent_proc->standard_in, 0);
+  } else {
+    new_proc->standard_in = nullptr;
+  }
+  if (parent_proc->standard_out) {
+    new_proc->standard_out = duplicate(parent_proc->standard_out, 1);
+  } else {
+    new_proc->standard_out = nullptr;
+  }
+  if (parent_proc->standard_error) {
+    new_proc->standard_error = duplicate(parent_proc->standard_error, 2);
+  } else {
+    new_proc->standard_error = nullptr;
   }
 
   new_proc->process_state = RUNNABLE;

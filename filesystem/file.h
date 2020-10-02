@@ -10,6 +10,7 @@ struct file_mapping {
   void *mapping;
   size_t mapping_len;
   uint32_t offset;
+  struct file *file;
   char is_private;
   struct file_mapping *next;
   struct file_mapping *prev;
@@ -17,18 +18,21 @@ struct file_mapping {
 
 struct pipe;
 
+struct file_descriptor {
+  uint32_t num;
+  struct file *file;
+  struct file_descriptor *next;
+  struct file_descriptor *prev;
+};
+
 struct file {
-  uint32_t file_descriptor;
-  char can_free;
   char *path;
-  char *buffer;
-  struct filesystem::pipe *read_write_pipe;
+  char *buffer; // Exclusively used for directories
+  struct pipe *read_write_pipe;
   uint32_t inode; // Actually just cluster num
   uint32_t size;
   uint32_t offset;
-  struct file_mapping *mappings;
-  struct file *next;
-  struct file *prev;
+  int num_references;
 };
 
 struct __attribute__((packed)) dirent_header {
@@ -49,6 +53,10 @@ constexpr uint32_t ALL_RWX = 0x1FF;
 
 // Loads a file into memory
 void load_file(struct file *file);
+
+struct file_descriptor *
+find_file_descriptor(uint32_t descriptor_num,
+                     struct file_descriptor *descriptors);
 
 } // namespace filesystem
 
