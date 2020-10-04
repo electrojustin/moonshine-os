@@ -101,4 +101,11 @@ uint32_t dup2(uint32_t old_fd, uint32_t new_fd, uint32_t reserved1,
   return 0;
 }
 
+uint32_t dup(uint32_t old_fd, uint32_t reserved1, uint32_t reserved2,
+              uint32_t reserved3, uint32_t reserved4, uint32_t reserved5) {
+   struct process *current_process = get_currently_executing_process();
+   current_process->next_file_descriptor++;
+   return dup2(old_fd, current_process->next_file_descriptor-1, 0, 0, 0, 0); 
+}
+
 } // namespace proc
