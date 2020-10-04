@@ -12,7 +12,7 @@ int main(void) {
   if (!fork()) {
     dup2(pipefd[0], fileno(stdin));
     char *argv[2] = {"test.exe", nullptr};
-    execve("test.exe", argv, nullptr);
+    execv("test.exe", argv);
   } else {
     while (1) {
       char *message = "Hello from child!\n";

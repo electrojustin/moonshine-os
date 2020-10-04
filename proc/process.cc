@@ -67,8 +67,9 @@ void cleanup_process(struct process *to_cleanup) {
 
   struct file_descriptor *current_file = to_cleanup->open_files;
   while (current_file) {
+    struct file_descriptor *next = current_file->next;
     close_file_descriptor(current_file);
-    current_file = to_cleanup->open_files;
+    current_file = next;
   }
   if (to_cleanup->standard_in) {
     close_file_descriptor(to_cleanup->standard_in);
@@ -92,6 +93,15 @@ void cleanup_process(struct process *to_cleanup) {
     }
   }
   kfree(to_cleanup->argv);
+
+  char **current_envp = to_cleanup->envp;
+  if (to_cleanup->envp) {
+    while (*current_envp) {
+      kfree(*current_envp);
+      current_envp++;
+    }
+    kfree(to_cleanup->envp);
+  }
 
   kfree(to_cleanup->tls_segments);
 
@@ -160,7 +170,8 @@ void execute_new_process(void) {
 
 constexpr uint32_t STACK_ALIGNMENT = 0x4;
 
-uint32_t setup_initial_stack(int argc, char **argv, uint32_t stack_top_virtual,
+uint32_t setup_initial_stack(int argc, char **argv, char **envp,
+                             uint32_t stack_top_virtual,
                              char *stack_top_physical) {
   uint32_t setup_size = sizeof(int);
   for (int i = 0; i < argc; i++) {
@@ -168,7 +179,17 @@ uint32_t setup_initial_stack(int argc, char **argv, uint32_t stack_top_virtual,
                   sizeof(char *); // Add in the size of all the argvs
   }
   setup_size += sizeof(char *); // Argvs are null terminated
-  setup_size += sizeof(char *); // Leave room for env
+
+  int envc = 0;
+  if (envp) {
+    while (envp[envc]) {
+      setup_size +=
+          strlen(envp[envc]) + 1 + sizeof(char *); // Add the size of all envps
+      envc++;
+    }
+  }
+  setup_size += sizeof(char *); // Envp is null terminated
+
   setup_size +=
       2 * sizeof(uint32_t) + sizeof(uint64_t *) +
       sizeof(uint64_t); // Leave room for an aux vector with stack canary
@@ -182,14 +203,28 @@ uint32_t setup_initial_stack(int argc, char **argv, uint32_t stack_top_virtual,
   char **argv_copy = (char **)(stack_top_physical - setup_size + sizeof(int));
   char **argv_copy_virtual =
       (char **)(stack_top_virtual - setup_size + sizeof(int));
-  argv_copy[argc + 1] = 0; // Initialize env
-  argv_copy[argc] = 0;     // Null terminate argv
+  argv_copy[argc + 1] = nullptr; // Initialize env
+  argv_copy[argc] = nullptr;     // Null terminate argv
   for (int i = argc - 1; i >= 0; i--) {
     size_t argv_size = strlen(argv[i]) + 1;
     stack_top_virtual -= argv_size;
     stack_top_physical -= argv_size;
     memcpy(argv[i], stack_top_physical, argv_size);
     argv_copy[i] = (char *)stack_top_virtual;
+  }
+
+  // Initialize the envp
+  if (envp) {
+    char **envp_copy = argv_copy + argc + 1;
+    char **envp_copy_virtual = argv_copy_virtual + argc + 1;
+    envp_copy[envc] = nullptr;
+    for (int i = envc - 1; i >= 0; i--) {
+      size_t envp_size = strlen(envp[i]) + 1;
+      stack_top_virtual -= envp_size;
+      stack_top_physical -= envp_size;
+      memcpy(envp[i], stack_top_physical, envp_size);
+      envp_copy[i] = (char *)stack_top_virtual;
+    }
   }
 
   // Initialize aux vector
@@ -210,8 +245,12 @@ uint32_t setup_initial_stack(int argc, char **argv, uint32_t stack_top_virtual,
   uint32_t *aux_vector = (uint32_t *)stack_top_virtual;
 
   // We already populated argv above, skip these bytes
-  stack_top_virtual -= (argc + 2) * sizeof(char *);
-  stack_top_physical -= (argc + 2) * sizeof(char *);
+  stack_top_virtual -= (argc + 1) * sizeof(char *);
+  stack_top_physical -= (argc + 1) * sizeof(char *);
+
+  // Already populated by envp, skip
+  stack_top_virtual -= (envc + 1) * sizeof(char *);
+  stack_top_physical -= (envc + 1) * sizeof(char *);
 
   // Note that we don't actually push a pointer to argv or auxvector onto the
   // stack, even though it looks like we should based on _libc_start_main's
@@ -236,7 +275,7 @@ uint32_t next_pid = 1;
 
 } // namespace
 
-char spawn_new_process(char *path, int argc, char **argv,
+char spawn_new_process(char *path, int argc, char **argv, char **envp,
                        struct process_memory_segment *segments,
                        uint32_t num_segments, void (*entry_address)(void),
                        char *working_dir, struct file_descriptor *standard_in,
@@ -360,9 +399,10 @@ char spawn_new_process(char *path, int argc, char **argv,
                                 (uint32_t)stack_segment->actual_address;
   new_proc->argc = argc;
   new_proc->argv = argv;
+  new_proc->envp = envp;
   new_proc->esp =
-      setup_initial_stack(new_proc->argc, new_proc->argv, new_proc->esp,
-                          (char *)stack_top_physical);
+      setup_initial_stack(new_proc->argc, new_proc->argv, new_proc->envp,
+                          new_proc->esp, (char *)stack_top_physical);
 
   // Set up page directory
   new_proc->page_dir =

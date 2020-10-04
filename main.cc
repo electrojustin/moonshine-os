@@ -179,7 +179,11 @@ void kernel_main(multiboot_info_t *multiboot_info, unsigned int magic) {
   char **argv = (char **)lib::std::kmalloc(2 * sizeof(char *));
   argv[0] = lib::std::make_string_copy("/init.exe");
   argv[1] = nullptr;
-  proc::load_elf(argv[0], 1, argv);
+  char **envp = (char **)lib::std::kmalloc(2 * sizeof(char *));
+  envp[0] = lib::std::make_string_copy("PATH=/bin");
+  envp[1] = lib::std::make_string_copy("LD_LIBRARY_PATH=/lib:/usr/lib32");
+  envp[2] = nullptr;
+  proc::load_elf(argv[0], 1, argv, envp);
 
   // Execute processes
   proc::execute_processes();

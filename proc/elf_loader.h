@@ -11,7 +11,8 @@ using filesystem::file_descriptor;
 
 } // namespace
 
-char load_elf(char *path, int argc, char **argv, char *working_dir = "/",
+char load_elf(char *path, int argc, char **argv, char **envp,
+              char *working_dir = "/",
               struct file_descriptor *standard_in = nullptr,
               struct file_descriptor *standard_out = nullptr,
               struct file_descriptor *standard_error = nullptr,

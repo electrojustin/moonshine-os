@@ -113,6 +113,22 @@ uint32_t fork(uint32_t reserved1, uint32_t reserved2, uint32_t reserved3,
     new_proc->argv[i] = make_string_copy(parent_proc->argv[i]);
   }
 
+  int envc = 0;
+  if (parent_proc->envp) {
+    while (parent_proc->envp[envc]) {
+      envc++;
+    }
+  }
+  if (envc) {
+    new_proc->envp = (char **)kmalloc((envc + 1) * sizeof(char *));
+    for (int i = 0; i < envc; i++) {
+      new_proc->envp[i] = make_string_copy(parent_proc->envp[i]);
+    }
+    new_proc->envp[envc] = nullptr;
+  } else {
+    new_proc->envp = nullptr;
+  }
+
   struct file_mapping *current_mapping = parent_proc->mappings;
   struct file_mapping *last_new_mapping = nullptr;
   while (current_mapping) {
